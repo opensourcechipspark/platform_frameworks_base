@@ -471,6 +471,7 @@ public class WifiMonitor {
 
         public synchronized void killSupplicant(boolean p2pSupported) {
             mWifiNative.killSupplicant(p2pSupported);
+            mWifiNative.closeSupplicantConnection();
             mConnected = false;
             Iterator<Map.Entry<String, WifiMonitor>> it = mIfaceMap.entrySet().iterator();
             while (it.hasNext()) {

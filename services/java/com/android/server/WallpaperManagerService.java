@@ -40,6 +40,7 @@ import android.content.pm.ServiceInfo;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.UserInfo;
 import android.content.res.Resources;
+import android.graphics.Point;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.Environment;
@@ -55,6 +56,7 @@ import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.os.Build;
 import android.service.wallpaper.IWallpaperConnection;
 import android.service.wallpaper.IWallpaperEngine;
 import android.service.wallpaper.IWallpaperService;
@@ -637,6 +639,14 @@ class WallpaperManagerService extends IWallpaperManager.Stub {
         return false;
     }
 
+    private Point getDefaultDisplaySize() {
+        Point p = new Point();
+        WindowManager wm = (WindowManager)mContext.getSystemService(Context.WINDOW_SERVICE);
+        Display d = wm.getDefaultDisplay();
+        d.getRealSize(p);
+        return p;
+    }
+
     public void setDimensionHints(int width, int height) throws RemoteException {
         checkPermission(android.Manifest.permission.SET_WALLPAPER_HINTS);
         synchronized (mLock) {
@@ -648,7 +658,20 @@ class WallpaperManagerService extends IWallpaperManager.Stub {
             if (width <= 0 || height <= 0) {
                 throw new IllegalArgumentException("width and height must be > 0");
             }
+            // Make sure it is at least as large as the display.
+            Point displaySize = getDefaultDisplaySize();
+            width = Math.max(width, displaySize.x);
+            height = Math.max(height, displaySize.y);
 
+            if (Build.USE_LCDC_COMPOSER && !(width == 320 && height == 480)) {
+                Point size = new Point();
+                WindowManager wm = (WindowManager)mContext.getSystemService(Context.WINDOW_SERVICE);
+                Display d = wm.getDefaultDisplay();
+                d.getRealSize(size);
+                int minDim = Math.max(Math.min(width, height), Math.max(size.x, size.y));
+                minDim = (int)Math.ceil((minDim - size.x) / (float)128) * 128 + (int)Math.ceil(size.x / (float)64) * 64;
+                width = height = minDim;
+            }
             if (width != wallpaper.width || height != wallpaper.height) {
                 wallpaper.width = width;
                 wallpaper.height = height;
@@ -1146,15 +1169,19 @@ class WallpaperManagerService extends IWallpaperManager.Stub {
         }
 
         // We always want to have some reasonable width hint.
-        WindowManager wm = (WindowManager)mContext.getSystemService(Context.WINDOW_SERVICE);
-        Display d = wm.getDefaultDisplay();
-        int baseSize = d.getMaximumSizeDimension();
+        int baseSize = getMaximumSizeDimension();
         if (wallpaper.width < baseSize) {
             wallpaper.width = baseSize;
         }
         if (wallpaper.height < baseSize) {
             wallpaper.height = baseSize;
         }
+    }
+
+    private int getMaximumSizeDimension() {
+        WindowManager wm = (WindowManager)mContext.getSystemService(Context.WINDOW_SERVICE);
+        Display d = wm.getDefaultDisplay();
+        return d.getMaximumSizeDimension();
     }
 
     // Called by SystemBackupAgent after files are restored to disk.

@@ -851,6 +851,34 @@ public abstract class PackageManager {
      * agent to return (in milliseconds).
      */
     public static final long MAXIMUM_VERIFICATION_TIMEOUT = 60*60*1000;
+    /**
+     * @hide
+     */
+    public static final int HARDWARE_ACC_MODE_UNKNOWN = 0;
+    /**
+     * @hide
+     */
+    public static final int HARDWARE_ACC_MODE_LOW = 1;
+    /**
+     * @hide
+     */
+    public static final int HARDWARE_ACC_MODE_NORMAL = 2;
+    /**
+     * @hide
+     */
+    public static final int HARDWARE_ACC_MODE_HIGH = 3;
+    /**
+     * @hide
+     */
+    public static final int HARDWARE_ACC_MODE_MAX = 4;
+    /**
+     * @hide
+     */
+    public static final int HARDWARE_ACC_MODE_SAFE = 5;
+    /**
+     * @hide
+     */
+    public static final int HARDWARE_ACC_FLAG_ASSIGNED = 8;
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}: The device's
@@ -921,7 +949,7 @@ public abstract class PackageManager {
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_CONSUMER_IR = "android.hardware.consumerir";
 
-    /**
+     /**
      * Feature for {@link #getSystemAvailableFeatures} and
      * {@link #hasSystemFeature}: The device supports one or more methods of
      * reporting current location.
@@ -3218,4 +3246,14 @@ public abstract class PackageManager {
         return Environment.getDataDirectory().toString() + "/user/" + userId
                 + "/" + packageName;
     }
+
+    /**
+     * @hide
+     */
+    public abstract int getPackageHardwareAccMode(String pkgName);
+
+    /**
+     * @hide
+     */
+    public abstract void setPackageHardwareAccMode(String pkgName, int mode);
 }

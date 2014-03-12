@@ -30,7 +30,7 @@ import java.util.GregorianCalendar;
 import java.util.Locale;
 import java.util.TimeZone;
 import java.text.SimpleDateFormat;
-
+import android.os.UserHandle;
 import libcore.icu.ICU;
 import libcore.icu.LocaleData;
 
@@ -128,8 +128,11 @@ public class DateFormat {
      * @return true if 24 hour time format is selected, false otherwise.
      */
     public static boolean is24HourFormat(Context context) {
-        String value = Settings.System.getString(context.getContentResolver(),
-                Settings.System.TIME_12_24);
+     //   String value = Settings.System.getString(context.getContentResolver(),
+       //         Settings.System.TIME_12_24);
+
+	     String value = Settings.System.getStringForUser(context.getContentResolver(),
+		                Settings.System.TIME_12_24,UserHandle.USER_CURRENT);
 
         if (value == null) {
             Locale locale = context.getResources().getConfiguration().locale;

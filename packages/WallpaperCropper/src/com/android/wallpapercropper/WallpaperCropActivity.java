@@ -247,19 +247,19 @@ public class WallpaperCropActivity extends Activity {
     private static int getRotationFromExifHelper(
             String path, Resources res, int resId, Context context, Uri uri) {
         ExifInterface ei = new ExifInterface();
+        InputStream is = null;
+        BufferedInputStream bis = null;
         try {
             if (path != null) {
                 ei.readExif(path);
             } else if (uri != null) {
-                InputStream is = context.getContentResolver().openInputStream(uri);
-                BufferedInputStream bis = new BufferedInputStream(is);
+                is = context.getContentResolver().openInputStream(uri);
+                bis = new BufferedInputStream(is);
                 ei.readExif(bis);
-                bis.close();
             } else {
-                InputStream is = res.openRawResource(resId);
-                BufferedInputStream bis = new BufferedInputStream(is);
+                is = res.openRawResource(resId);
+                bis = new BufferedInputStream(is);
                 ei.readExif(bis);
-                bis.close();
             }
             Integer ori = ei.getTagIntValue(ExifInterface.TAG_ORIENTATION);
             if (ori != null) {
@@ -267,6 +267,9 @@ public class WallpaperCropActivity extends Activity {
             }
         } catch (IOException e) {
             Log.w(LOGTAG, "Getting exif data failed", e);
+        } finally {
+            Utils.closeSilently(bis);
+            Utils.closeSilently(is);
         }
         return 0;
     }
@@ -326,40 +329,15 @@ public class WallpaperCropActivity extends Activity {
         // Get the crop
         boolean ltr = mCropView.getLayoutDirection() == View.LAYOUT_DIRECTION_LTR;
 
-        Point minDims = new Point();
-        Point maxDims = new Point();
+
         Display d = getWindowManager().getDefaultDisplay();
-        d.getCurrentSizeRange(minDims, maxDims);
 
         Point displaySize = new Point();
         d.getSize(displaySize);
-
-        int maxDim = Math.max(maxDims.x, maxDims.y);
-        final int minDim = Math.min(minDims.x, minDims.y);
-        int defaultWallpaperWidth;
-        if (isScreenLarge(getResources())) {
-            defaultWallpaperWidth = (int) (maxDim *
-                    wallpaperTravelToScreenWidthRatio(maxDim, minDim));
-        } else {
-            defaultWallpaperWidth = Math.max((int)
-                    (minDim * WALLPAPER_SCREENS_SPAN), maxDim);
-        }
-
         boolean isPortrait = displaySize.x < displaySize.y;
-        int portraitHeight;
-        if (isPortrait) {
-            portraitHeight = mCropView.getHeight();
-        } else {
-            // TODO: how to actually get the proper portrait height?
-            // This is not quite right:
-            portraitHeight = Math.max(maxDims.x, maxDims.y);
-        }
-        if (android.os.Build.VERSION.SDK_INT >=
-                android.os.Build.VERSION_CODES.JELLY_BEAN_MR1) {
-            Point realSize = new Point();
-            d.getRealSize(realSize);
-            portraitHeight = Math.max(realSize.x, realSize.y);
-        }
+
+        Point defaultWallpaperSize = getDefaultWallpaperSize(getResources(),
+                getWindowManager());
         // Get the crop
         RectF cropRect = mCropView.getCrop();
         int cropRotation = mCropView.getImageRotation();
@@ -378,7 +356,7 @@ public class WallpaperCropActivity extends Activity {
         // (or all the way to the left, in RTL)
         float extraSpace = ltr ? rotatedInSize[0] - cropRect.right : cropRect.left;
         // Cap the amount of extra width
-        float maxExtraSpace = defaultWallpaperWidth / cropScale - cropRect.width();
+        float maxExtraSpace = defaultWallpaperSize.x / cropScale - cropRect.width();
         extraSpace = Math.min(extraSpace, maxExtraSpace);
 
         if (ltr) {
@@ -389,10 +367,10 @@ public class WallpaperCropActivity extends Activity {
 
         // ADJUST CROP HEIGHT
         if (isPortrait) {
-            cropRect.bottom = cropRect.top + portraitHeight / cropScale;
+            cropRect.bottom = cropRect.top + defaultWallpaperSize.y / cropScale;
         } else { // LANDSCAPE
             float extraPortraitHeight =
-                    portraitHeight / cropScale - cropRect.height();
+                    defaultWallpaperSize.y / cropScale - cropRect.height();
             float expandHeight =
                     Math.min(Math.min(rotatedInSize[1] - cropRect.bottom, cropRect.top),
                             extraPortraitHeight / 2);
@@ -606,13 +584,13 @@ public class WallpaperCropActivity extends Activity {
                 }
 
                 // See how much we're reducing the size of the image
-                int scaleDownSampleSize = Math.min(roundedTrueCrop.width() / mOutWidth,
-                        roundedTrueCrop.height() / mOutHeight);
-
+                int scaleDownSampleSize = Math.max(1, Math.min(roundedTrueCrop.width() / mOutWidth,
+                        roundedTrueCrop.height() / mOutHeight));
                 // Attempt to open a region decoder
                 BitmapRegionDecoder decoder = null;
+                InputStream is = null;
                 try {
-                    InputStream is = regenerateInputStream();
+                    is = regenerateInputStream();
                     if (is == null) {
                         Log.w(LOGTAG, "cannot get input stream for uri=" + mInUri.toString());
                         failure = true;
@@ -622,6 +600,9 @@ public class WallpaperCropActivity extends Activity {
                     Utils.closeSilently(is);
                 } catch (IOException e) {
                     Log.w(LOGTAG, "cannot open region decoder for file: " + mInUri.toString(), e);
+                } finally {
+                   Utils.closeSilently(is);
+                   is = null;
                 }
 
                 Bitmap crop = null;
@@ -637,7 +618,7 @@ public class WallpaperCropActivity extends Activity {
 
                 if (crop == null) {
                     // BitmapRegionDecoder has failed, try to crop in-memory
-                    InputStream is = regenerateInputStream();
+                    is = regenerateInputStream();
                     Bitmap fullSize = null;
                     if (is != null) {
                         BitmapFactory.Options options = new BitmapFactory.Options();
@@ -757,7 +738,7 @@ public class WallpaperCropActivity extends Activity {
 
     protected void updateWallpaperDimensions(int width, int height) {
         String spKey = getSharedPreferencesKey();
-        SharedPreferences sp = getSharedPreferences(spKey, Context.MODE_PRIVATE);
+        SharedPreferences sp = getSharedPreferences(spKey, Context.MODE_MULTI_PROCESS);
         SharedPreferences.Editor editor = sp.edit();
         if (width != 0 && height != 0) {
             editor.putInt(WALLPAPER_WIDTH_KEY, width);

@@ -44,7 +44,7 @@
 #include <cutils/log.h>
 #include <input/Keyboard.h>
 #include <input/VirtualKeyMap.h>
-
+#include <cutils/properties.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -3675,6 +3675,21 @@ void TouchInputMapper::process(const RawEvent* rawEvent) {
 }
 
 void TouchInputMapper::sync(nsecs_t when) {
+    //--begin---modify by yzq --
+    char scale = 100;
+    static  char myvalue[PROPERTY_VALUE_MAX];
+   if(!property_get("sys.hdmi_screen.scale",myvalue,NULL)){
+			scale=100;
+		    }
+		    if(scale <80 || scale >100){
+					scale = 80;
+				    }
+ /*-------------------------------------------------------------------------------
+error:In function 'int property_get(const char*, char*, const char*)',
+    inlined from 'void android::TouchInputMapper::sync(nsecs_t)' at frameworks/base/services/input/InputReader.cpp:3683:57:
+	system/core/include/cutils/properties.h:63:41: error: call to '__property_get_too_small_error' declared with attribute error: property_get() called with too small of a buffer
+                   -------------------------*/
+			    //--end -- 
     // Sync button state.
     mCurrentButtonState = mTouchButtonAccumulator.getButtonState()
             | mCursorButtonAccumulator.getButtonState();
@@ -3687,8 +3702,10 @@ void TouchInputMapper::sync(nsecs_t when) {
     // Sync touch state.
     bool havePointerIds = true;
     mCurrentRawPointerData.clear();
-    syncTouch(when, &havePointerIds);
-
+//    syncTouch(when, &havePointerIds);
+//--begin---modify by yzq --
+    syncTouch(when, &havePointerIds,mSurfaceWidth,mSurfaceHeight,scale);
+//--end --
 #if DEBUG_RAW_EVENTS
     if (!havePointerIds) {
         ALOGD("syncTouch: pointerCount %d -> %d, no pointer ids",
@@ -5942,7 +5959,16 @@ void SingleTouchInputMapper::process(const RawEvent* rawEvent) {
     mSingleTouchMotionAccumulator.process(rawEvent);
 }
 
-void SingleTouchInputMapper::syncTouch(nsecs_t when, bool* outHavePointerIds) {
+//void SingleTouchInputMapper::syncTouch(nsecs_t when, bool* outHavePointerIds) {
+void SingleTouchInputMapper::syncTouch(nsecs_t when, bool* outHavePointerIds ,int32_t width,int32_t height,char scale) {
+		    //--begin---modify by yzq --
+		    int32_t  s_xpos =0;
+		    int32_t  s_ypos =0;
+		    if(scale != 100){
+					s_xpos = width*((100-scale)/2)/100;
+					s_ypos = height*((100-scale)/2)/100;
+				    }
+				    //--end --
     if (mTouchButtonAccumulator.isToolActive()) {
         mCurrentRawPointerData.pointerCount = 1;
         mCurrentRawPointerData.idToIndex[0] = 0;
@@ -5955,8 +5981,24 @@ void SingleTouchInputMapper::syncTouch(nsecs_t when, bool* outHavePointerIds) {
 
         RawPointerData::Pointer& outPointer = mCurrentRawPointerData.pointers[0];
         outPointer.id = 0;
+    //--begin---modify by yzq --
+	if(scale != 100){
+			    if(mSingleTouchMotionAccumulator.getAbsoluteX() < s_xpos)
+				outPointer.x = s_xpos;
+			    else if(mSingleTouchMotionAccumulator.getAbsoluteY() < s_ypos)
+				outPointer.y = s_ypos;
+			    else {
+						outPointer.x = (mSingleTouchMotionAccumulator.getAbsoluteX()-s_xpos)*100/scale;
+						outPointer.y = (mSingleTouchMotionAccumulator.getAbsoluteY()-s_ypos)*100/scale;
+						if(outPointer.x > width)
+						    outPointer.x = width;
+						else if(outPointer.y > height)
+						    outPointer.y = height;
+					    }
+					}else{		
         outPointer.x = mSingleTouchMotionAccumulator.getAbsoluteX();
         outPointer.y = mSingleTouchMotionAccumulator.getAbsoluteY();
+}
         outPointer.pressure = mSingleTouchMotionAccumulator.getAbsolutePressure();
         outPointer.touchMajor = 0;
         outPointer.touchMinor = 0;
@@ -6014,11 +6056,19 @@ void MultiTouchInputMapper::process(const RawEvent* rawEvent) {
     mMultiTouchMotionAccumulator.process(rawEvent);
 }
 
-void MultiTouchInputMapper::syncTouch(nsecs_t when, bool* outHavePointerIds) {
+//void MultiTouchInputMapper::syncTouch(nsecs_t when, bool* outHavePointerIds) {
+void MultiTouchInputMapper::syncTouch(nsecs_t when, bool* outHavePointerIds,int32_t width,int32_t height,char scale) { 
     size_t inCount = mMultiTouchMotionAccumulator.getSlotCount();
     size_t outCount = 0;
     BitSet32 newPointerIdBits;
-
+    //--begin---modify by yzq --
+    int32_t s_xpos =0;
+    int32_t s_ypos =0;
+    if(scale != 100){
+			s_xpos = width*((100-scale)/2)/100;
+			s_ypos = height*((100-scale)/2)/100;
+		    }
+		    //--end--
     for (size_t inIndex = 0; inIndex < inCount; inIndex++) {
         const MultiTouchMotionAccumulator::Slot* inSlot =
                 mMultiTouchMotionAccumulator.getSlot(inIndex);
@@ -6036,8 +6086,26 @@ void MultiTouchInputMapper::syncTouch(nsecs_t when, bool* outHavePointerIds) {
         }
 
         RawPointerData::Pointer& outPointer = mCurrentRawPointerData.pointers[outCount];
-        outPointer.x = inSlot->getX();
-        outPointer.y = inSlot->getY();
+    //--begin---modify by yzq --
+	if(scale != 100){
+			    if(inSlot->getX() < s_xpos)
+				outPointer.x = s_xpos;
+			    else if(inSlot->getY() < s_ypos)
+				outPointer.y = s_ypos;
+			    else {
+						outPointer.x = (inSlot->getX() - s_xpos)*100/scale;
+						outPointer.y = (inSlot->getY() - s_ypos)*100/scale;
+						if(outPointer.x > width)
+						    outPointer.x = width;
+						else if(outPointer.y > height)
+						    outPointer.y = height;
+					    }
+					}else{
+						         outPointer.x = inSlot->getX();
+								 outPointer.y = inSlot->getY();
+										  	}
+//        outPointer.x = inSlot->getX();
+  //      outPointer.y = inSlot->getY();
         outPointer.pressure = inSlot->getPressure();
         outPointer.touchMajor = inSlot->getTouchMajor();
         outPointer.touchMinor = inSlot->getTouchMinor();

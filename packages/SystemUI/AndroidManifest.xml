@@ -71,11 +71,15 @@
     <!-- Keyguard -->
     <uses-permission android:name="android.permission.CONTROL_KEYGUARD" />
 
+    <!-- Wifi Display -->
+    <uses-permission android:name="android.permission.CONFIGURE_WIFI_DISPLAY" />
+
     <application
         android:persistent="true"
         android:allowClearUserData="false"
         android:allowBackup="false"
         android:hardwareAccelerated="true"
+        android:largeHeap="true"
         android:label="@string/app_label"
         android:icon="@*android:drawable/platlogo"
         android:process="com.android.systemui"

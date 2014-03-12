@@ -30,7 +30,6 @@ import static android.net.ConnectivityManager.getNetworkTypeName;
 import static android.net.ConnectivityManager.isNetworkTypeValid;
 import static android.net.NetworkPolicyManager.RULE_ALLOW_ALL;
 import static android.net.NetworkPolicyManager.RULE_REJECT_METERED;
-
 import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationManager;
@@ -638,7 +637,6 @@ public class ConnectivityService extends IConnectivityManager.Stub {
                 tracker.reconnect();
             }
         }
-
         mTethering = new Tethering(mContext, mNetd, statsService, this, mHandler.getLooper());
 
         //set up the listener for user state for creating user VPNs
@@ -871,7 +869,11 @@ public class ConnectivityService extends IConnectivityManager.Stub {
         final int networkPrefSetting = Settings.Global
                 .getInt(cr, Settings.Global.NETWORK_PREFERENCE, -1);
 
-        return networkPrefSetting;
+        if (networkPrefSetting != -1) {
+            return networkPrefSetting;
+        }
+
+        return ConnectivityManager.DEFAULT_NETWORK_PREFERENCE;
     }
 
     /**
@@ -3029,6 +3031,7 @@ public class ConnectivityService extends IConnectivityManager.Stub {
                     //       change not resetting sockets.
                     //       @see bug/4455071
                     handleConnectivityChange(info.getType(), false);
+				  
                     break;
                 }
                 case NetworkStateTracker.EVENT_NETWORK_SUBTYPE_CHANGED: {
@@ -3380,6 +3383,11 @@ public class ConnectivityService extends IConnectivityManager.Stub {
             String pacFileUrl = "";
             if (proxyProperties != null && (!TextUtils.isEmpty(proxyProperties.getHost()) ||
                     !TextUtils.isEmpty(proxyProperties.getPacFileUrl()))) {
+                if (!proxyProperties.isValid()) {
+                    if (DBG)
+                        log("Invalid proxy properties, ignoring: " + proxyProperties.toString());
+                    return;
+                }
                 mGlobalProxy = new ProxyProperties(proxyProperties);
                 host = mGlobalProxy.getHost();
                 port = mGlobalProxy.getPort();
@@ -3423,6 +3431,11 @@ public class ConnectivityService extends IConnectivityManager.Stub {
             } else {
                 proxyProperties = new ProxyProperties(host, port, exclList);
             }
+            if (!proxyProperties.isValid()) {
+                if (DBG) log("Invalid proxy properties, ignoring: " + proxyProperties.toString());
+                return;
+            }
+
             synchronized (mProxyLock) {
                 mGlobalProxy = proxyProperties;
             }
@@ -3447,6 +3460,10 @@ public class ConnectivityService extends IConnectivityManager.Stub {
         synchronized (mProxyLock) {
             if (mDefaultProxy != null && mDefaultProxy.equals(proxy)) return;
             if (mDefaultProxy == proxy) return; // catches repeated nulls
+            if (proxy != null &&  !proxy.isValid()) {
+                if (DBG) log("Invalid proxy properties, ignoring: " + proxy.toString());
+                return;
+            }
             mDefaultProxy = proxy;
 
             if (mGlobalProxy != null) return;

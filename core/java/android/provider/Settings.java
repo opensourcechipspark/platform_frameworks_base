@@ -1581,6 +1581,18 @@ public final class Settings {
         public static final int ADVANCED_SETTINGS_DEFAULT = 0;
 
         /**
+         *Screenshot store location  add by dzy
+         * @hide
+         */
+        public static final String SCREENSHOT_LOCATION="screenshot_location";
+
+       /**
+         *scrrenshot button wether display
+         * @hide
+         */
+        public static final String SCREENSHOT_BUTTON_SHOW="screenshot_button_show";
+
+        /**		
          * @deprecated Use {@link android.provider.Settings.Global#AIRPLANE_MODE_ON} instead
          */
         @Deprecated
@@ -1722,7 +1734,48 @@ public final class Settings {
          */
         @Deprecated
         public static final String WIFI_STATIC_DNS2 = "wifi_static_dns2";
-
+        
+		        /**
+		         * Whether to use static IP and other static network attributes.
+		         * @hide
+		         * Set to 1 for true and 0 for false.
+		         */
+		        public static final String ETHERNET_USE_STATIC_IP = "ethernet_use_static_ip";
+		
+		        /**
+		         * The static IP address.
+		         * @hide
+		         * Example: "192.168.1.51"
+		         */
+		        public static final String ETHERNET_STATIC_IP = "ethernet_static_ip";
+	
+		        /**
+		         * If using static IP, the gateway's IP address.
+		         * @hide
+		         * Example: "192.168.1.1"
+		         */
+		        public static final String ETHERNET_STATIC_GATEWAY = "ethernet_static_gateway";
+		
+		        /**
+		         * If using static IP, the net mask.
+		         * @hide
+		         * Example: "255.255.255.0"
+		         */
+		        public static final String ETHERNET_STATIC_NETMASK = "ethernet_static_netmask";
+		
+		        /**
+		         * If using static IP, the primary DNS's IP address.
+		         * @hide
+		         * Example: "192.168.1.1"
+		         */
+		        public static final String ETHERNET_STATIC_DNS1 = "ethernet_static_dns1";
+		
+		        /**
+		         * If using static IP, the secondary DNS's IP address.
+		         * @hide
+		         * Example: "192.168.1.2"
+		         */
+		        public static final String ETHERNET_STATIC_DNS2 = "ethernet_static_dns2";
 
         /**
          * Determines whether remote devices may discover and/or connect to
@@ -1823,6 +1876,13 @@ public final class Settings {
          * @hide
          */
         public static final String SCREEN_AUTO_BRIGHTNESS_ADJ = "screen_auto_brightness_adj";
+        
+	//add for Hdmi
+	/**
+         * The hdmi lcd timeout seconds
+         *@hide
+         */
+	public static final String HDMI_LCD_TIMEOUT = "hdmi_lcd_timeout";
 
         /**
          * SCREEN_BRIGHTNESS_MODE value for manual mode.
@@ -2511,6 +2571,12 @@ public final class Settings {
         public static final String DATA_ROAMING = Global.DATA_ROAMING;
 
         /**
+         *
+         * @hide
+         */
+        public static final String ETHERNET_ON = "ethernet_on";
+
+        /**			
          * @deprecated Use {@link android.provider.Settings.Global#DEVICE_PROVISIONED} instead
          */
         @Deprecated
@@ -3531,6 +3597,11 @@ public final class Settings {
          */
         public static final String TOUCH_EXPLORATION_GRANTED_ACCESSIBILITY_SERVICES =
             "touch_exploration_granted_accessibility_services";
+	        /**
+         *
+         * @hide
+         */
+        public static final String ETHERNET_ON = "ethernet_on";	
 
         /**
          * Whether to speak passwords while in accessibility mode.
@@ -5836,6 +5907,13 @@ public final class Settings {
          * @hide
          */
         public static final String DOCK_AUDIO_MEDIA_ENABLED = "dock_audio_media_enabled";
+	/**
+         * Use Dock audio output for spdif:
+         *      0 = disabled
+         *      1 = enabled
+         * @hide
+         */
+        public static final String SPDIF_OUTPUT_ENABLED = "spdif_output";
 
         /**
          * Persisted safe headphone volume management state by AudioService
@@ -5960,7 +6038,8 @@ public final class Settings {
             WIFI_NUM_OPEN_NETWORKS_KEPT,
             EMERGENCY_TONE,
             CALL_AUTO_RETRY,
-            DOCK_AUDIO_MEDIA_ENABLED
+            DOCK_AUDIO_MEDIA_ENABLED,
+	    SPDIF_OUTPUT_ENABLED
         };
 
         // Populated lazily, guarded by class object:

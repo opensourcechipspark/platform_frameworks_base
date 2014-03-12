@@ -1079,7 +1079,7 @@ public class PackageManagerService extends IPackageManager.Stub {
         mContext = context;
         mFactoryTest = factoryTest;
         mOnlyCore = onlyCore;
-        mNoDexOpt = "eng".equals(SystemProperties.get("ro.build.type"));
+        mNoDexOpt = false;//"eng".equals(SystemProperties.get("ro.build.type"));
         mMetrics = new DisplayMetrics();
         mSettings = new Settings(context);
         mSettings.addSharedUserLPw("android.uid.system", Process.SYSTEM_UID,
@@ -1278,7 +1278,8 @@ public class PackageManagerService extends IPackageManager.Stub {
                 frameworkDir.getPath(), OBSERVER_EVENTS, true, false);
             mFrameworkInstallObserver.startWatching();
             scanDirLI(frameworkDir, PackageParser.PARSE_IS_SYSTEM
-                    | PackageParser.PARSE_IS_SYSTEM_DIR,
+                    | PackageParser.PARSE_IS_SYSTEM_DIR
+                    | PackageParser.PARSE_IS_PRIVILEGED,
                     scanMode | SCAN_NO_DEX, 0);
 
             // Collected privileged system packages.
@@ -1297,6 +1298,30 @@ public class PackageManagerService extends IPackageManager.Stub {
             mSystemInstallObserver.startWatching();
             scanDirLI(systemAppDir, PackageParser.PARSE_IS_SYSTEM
                     | PackageParser.PARSE_IS_SYSTEM_DIR, scanMode, 0);
+
+            // Collect all preinstall packages.
+            File preinstallAppDir = new File(Environment.getRootDirectory(), "preinstall");
+            File preinstallAppDelDir = new File(Environment.getRootDirectory(),
+                    "preinstall_del");
+            if (!SystemProperties.getBoolean("persist.sys.preinstalled", false)) {
+                // mPreInstallObserver = new AppDirObserver(
+                // mPreinstallAppDir.getPath(), OBSERVER_EVENTS, false);
+                // mPreInstallObserver.startWatching();
+
+                if (preinstallAppDir.exists()) {
+                    // scanDirLI(mPreinstallAppDir, 0, scanMode, 0);
+                    copyPackagesToAppInstallDir(preinstallAppDir);
+                }
+
+                // mPreInstallDelObserver = new AppDirObserver(
+                // mPreinstallAppDelDir.getPath(), OBSERVER_EVENTS, false);
+                // mPreInstallDelObserver.startWatching();
+                if (preinstallAppDelDir.exists()) {
+                    copyPackagesToAppInstallDir(preinstallAppDelDir);
+                    deletePreinstallDir(preinstallAppDelDir);
+                }
+                SystemProperties.set("persist.sys.preinstalled", "1");
+            }
 
             // Collect all vendor packages.
             File vendorAppDir = new File("/vendor/app");
@@ -1467,6 +1492,39 @@ public class PackageManagerService extends IPackageManager.Stub {
             mRequiredVerifierPackage = getRequiredVerifierLPr();
         } // synchronized (mPackages)
         } // synchronized (mInstallLock)
+    }
+
+    private void copyPackagesToAppInstallDir(File srcDir) {
+        String[] files = srcDir.list();
+        if (files == null) {
+            Log.d(TAG, "No files in app dir " + srcDir);
+            return;
+        }
+
+        int i;
+        for (i = 0; i < files.length; i++) {
+            File srcFile = new File(srcDir, files[i]);
+            File destFile = new File(mAppInstallDir, files[i]);
+            Slog.d(TAG, "Copy " + srcFile.getPath() + " to " + destFile.getPath());
+            if (!isPackageFilename(files[i])) {
+                // Ignore entries which are not apk's
+                continue;
+            }
+            if (!FileUtils.copyFile(srcFile, destFile)) {
+                Slog.d(TAG, "Copy " + srcFile.getPath() + " to " + destFile.getPath() + " fail");
+                continue;
+            }
+            FileUtils.setPermissions(destFile.getAbsolutePath(), FileUtils.S_IRUSR
+                    | FileUtils.S_IWUSR | FileUtils.S_IRGRP | FileUtils.S_IROTH, -1, -1);
+        }
+    }
+
+    private void deletePreinstallDir(File dir) {
+        String[] files = dir.list();
+        if (files != null) {
+            Slog.d(TAG, "Ready to cleanup preinstall");
+            SystemProperties.set("ctl.start", "preinst_clr");
+        }
     }
 
     public boolean isFirstBoot() {
@@ -1769,6 +1827,24 @@ public class PackageManagerService extends IPackageManager.Stub {
         return PackageParser.generatePackageInfo(p, gp.gids, flags,
                 ps.firstInstallTime, ps.lastUpdateTime, gp.grantedPermissions,
                 state, userId);
+    }
+
+    public boolean isPackageAvailable(String packageName, int userId) {
+        if (!sUserManager.exists(userId)) return false;
+        enforceCrossUserPermission(Binder.getCallingUid(), userId, false, "is package available");
+        synchronized (mPackages) {
+            PackageParser.Package p = mPackages.get(packageName);
+            if (p != null) {
+                final PackageSetting ps = (PackageSetting) p.mExtras;
+                if (ps != null) {
+                    final PackageUserState state = ps.readUserState(userId);
+                    if (state != null) {
+                        return PackageParser.isAvailable(state);
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     @Override
@@ -4959,6 +5035,18 @@ public class PackageManagerService extends IPackageManager.Stub {
                         permissionMap.put(p.info.name, bp);
                     }
                     if (bp.perm == null) {
+                        if (bp.sourcePackage != null
+                                && !bp.sourcePackage.equals(p.info.packageName)) {
+                            // If this is a permission that was formerly defined by a non-system
+                            // app, but is now defined by a system app (following an upgrade),
+                            // discard the previous declaration and consider the system's to be
+                            // canonical.
+                            if (isSystemApp(p.owner)) {
+                                Slog.i(TAG, "New decl " + p.owner + " of permission  "
+                                        + p.info.name + " is system");
+                                bp.sourcePackage = null;
+                            }
+                        }
                         if (bp.sourcePackage == null
                                 || bp.sourcePackage.equals(p.info.packageName)) {
                             BasePermission tree = findPermissionTreeLP(p.info.name);
@@ -8177,6 +8265,8 @@ public class PackageManagerService extends IPackageManager.Stub {
 
     private boolean isAsecExternal(String cid) {
         final String asecPath = PackageHelper.getSdFilesystem(cid);
+		if(asecPath == null)
+			return false;
         return !asecPath.startsWith(mAsecInternalPath);
     }
 
@@ -9999,11 +10089,11 @@ public class PackageManagerService extends IPackageManager.Stub {
         }
         if (filter.countDataAuthorities() != 0
                 || filter.countDataPaths() != 0
-                || filter.countDataSchemes() != 0
+                || filter.countDataSchemes() > 1
                 || filter.countDataTypes() != 0) {
             throw new IllegalArgumentException(
                     "replacePreferredActivity expects filter to have no data authorities, " +
-                    "paths, schemes or types.");
+                    "paths, or types; and at most one scheme.");
         }
         synchronized (mPackages) {
             if (mContext.checkCallingOrSelfPermission(
@@ -10020,33 +10110,27 @@ public class PackageManagerService extends IPackageManager.Stub {
             }
 
             final int callingUserId = UserHandle.getCallingUserId();
-            ArrayList<PreferredActivity> removed = null;
             PreferredIntentResolver pir = mSettings.mPreferredActivities.get(callingUserId);
             if (pir != null) {
-                Iterator<PreferredActivity> it = pir.filterIterator();
-                String action = filter.getAction(0);
-                String category = filter.getCategory(0);
-                while (it.hasNext()) {
-                    PreferredActivity pa = it.next();
-                    if ((pa.countActions() == 0) || (pa.countCategories() == 0)
-                            || (pa.getAction(0).equals(action)
-                                    && pa.getCategory(0).equals(category))) {
-                        if (removed == null) {
-                            removed = new ArrayList<PreferredActivity>();
-                        }
-                        removed.add(pa);
-                        if (DEBUG_PREFERRED) {
-                            Slog.i(TAG, "Removing preferred activity "
-                                    + pa.mPref.mComponent + ":");
-                            filter.dump(new LogPrinter(Log.INFO, TAG), "  ");
-                        }
-                    }
+                Intent intent = new Intent(filter.getAction(0)).addCategory(filter.getCategory(0));
+                if (filter.countDataSchemes() == 1) {
+                    Uri.Builder builder = new Uri.Builder();
+                    builder.scheme(filter.getDataScheme(0));
+                    intent.setData(builder.build());
                 }
-                if (removed != null) {
-                    for (int i=0; i<removed.size(); i++) {
-                        PreferredActivity pa = removed.get(i);
-                        pir.removeFilter(pa);
+                List<PreferredActivity> matches = pir.queryIntent(
+                        intent, null, true, callingUserId);
+                if (DEBUG_PREFERRED) {
+                    Slog.i(TAG, matches.size() + " preferred matches for " + intent);
+                }
+                for (int i = 0; i < matches.size(); i++) {
+                    PreferredActivity pa = matches.get(i);
+                    if (DEBUG_PREFERRED) {
+                        Slog.i(TAG, "Removing preferred activity "
+                                + pa.mPref.mComponent + ":");
+                        filter.dump(new LogPrinter(Log.INFO, TAG), "  ");
                     }
+                    pir.removeFilter(pa);
                 }
             }
             addPreferredActivityInternal(filter, match, set, activity, true, callingUserId);
@@ -10484,6 +10568,8 @@ public class PackageManagerService extends IPackageManager.Stub {
 
         public static final int DUMP_KEYSETS = 1 << 11;
 
+        public static final int DUMP_HARDWARE_ACC = 1 << 12;
+
         public static final int OPTION_SHOW_FILTERS = 1 << 0;
 
         private int mTypes;
@@ -10628,6 +10714,8 @@ public class PackageManagerService extends IPackageManager.Stub {
                 dumpState.setDump(DumpState.DUMP_VERIFIERS);
             } else if ("k".equals(cmd) || "keysets".equals(cmd)) {
                 dumpState.setDump(DumpState.DUMP_KEYSETS);
+            } else if ("hwacc".equals(cmd)) {
+                dumpState.setDump(DumpState.DUMP_HARDWARE_ACC);
             }
         }
 
@@ -10792,6 +10880,10 @@ public class PackageManagerService extends IPackageManager.Stub {
 
             if (dumpState.isDumping(DumpState.DUMP_SHARED_USERS)) {
                 mSettings.dumpSharedUsersLPr(pw, packageName, dumpState);
+            }
+
+            if (dumpState.isDumping(DumpState.DUMP_HARDWARE_ACC) && packageName == null) {
+                mSettings.dumphardwareAccPackage(pw, dumpState);
             }
 
             if (dumpState.isDumping(DumpState.DUMP_MESSAGES) && packageName == null) {
@@ -11550,5 +11642,42 @@ public class PackageManagerService extends IPackageManager.Stub {
         } finally {
             Binder.restoreCallingIdentity(token);
         }
+    }
+
+    /*
+     * @hide
+     */
+    public int getPackageHardwareAccMode(String pkgName) {
+        for (int i=0; i<mSettings.mHardwareAccPackages.size(); i++) {
+            if (pkgName.toLowerCase().equals(mSettings.mHardwareAccPackages.get(i).name.toLowerCase())) {
+                return mSettings.mHardwareAccPackages.get(i).mode | PackageManager.HARDWARE_ACC_FLAG_ASSIGNED;
+            }
+        }
+
+        for (int i=0; i<mSettings.mHardwareAccPackages.size(); i++) {
+            if (pkgName.toLowerCase().contains(mSettings.mHardwareAccPackages.get(i).name.toLowerCase())) {
+                return mSettings.mHardwareAccPackages.get(i).mode | PackageManager.HARDWARE_ACC_FLAG_ASSIGNED;
+            }
+        }
+        return PackageManager.HARDWARE_ACC_MODE_UNKNOWN;
+    }
+
+    /*
+     * @hide
+     */
+    public void setPackageHardwareAccMode(String pkgName, int mode) {
+        HardwareAccSetting pkgHAS = null;
+        for (int i=0; i<mSettings.mHardwareAccPackages.size(); i++) {
+            if (mSettings.mHardwareAccPackages.get(i).name.equals(pkgName)) {
+                pkgHAS = mSettings.mHardwareAccPackages.get(i);
+            }
+        }
+        if (pkgHAS != null) {
+            pkgHAS.setMode(mode);
+        } else {
+            pkgHAS = new HardwareAccSetting(pkgName, mode);
+            mSettings.mHardwareAccPackages.add(0, pkgHAS);
+        }
+        mSettings.writeLPr();
     }
 }

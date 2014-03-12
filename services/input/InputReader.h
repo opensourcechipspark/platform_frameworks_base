@@ -109,6 +109,21 @@ struct DisplayViewport {
         deviceWidth = width;
         deviceHeight = height;
     }
+
+    void copyFrom(const DisplayViewport& other) {
+        displayId = other.displayId;
+        orientation = other.orientation;
+        logicalLeft = other.logicalLeft;
+        logicalTop = other.logicalTop;
+        logicalRight = other.logicalRight;
+        logicalBottom = other.logicalBottom;
+        physicalLeft = other.physicalLeft;
+        physicalTop = other.physicalTop;
+        physicalRight = other.physicalRight;
+        physicalBottom = other.physicalBottom;
+        deviceWidth = other.deviceWidth;
+        deviceHeight = other.deviceHeight;
+    }
 };
 
 /*
@@ -1342,8 +1357,8 @@ protected:
     virtual void dumpCalibration(String8& dump);
     virtual bool hasStylus() const = 0;
 
-    virtual void syncTouch(nsecs_t when, bool* outHavePointerIds) = 0;
-
+  //  virtual void syncTouch(nsecs_t when, bool* outHavePointerIds) = 0;
+virtual void syncTouch(nsecs_t when, bool* outHavePointerIds,int32_t width,int32_t height,char scale) = 0;
 private:
     // The current viewport.
     // The components of the viewport are specified in the display's rotated orientation.
@@ -1362,7 +1377,10 @@ private:
     int32_t mSurfaceLeft;
     int32_t mSurfaceTop;
     int32_t mSurfaceOrientation;
-
+    // The associated display orientation and width and height set by configureSurface().
+    int32_t mAssociatedDisplayOrientation;
+    int32_t mAssociatedDisplayWidth;
+    int32_t mAssociatedDisplayHeight;
     // Translation and scaling factors, orientation-independent.
     float mXTranslate;
     float mXScale;
@@ -1694,7 +1712,8 @@ public:
     virtual void process(const RawEvent* rawEvent);
 
 protected:
-    virtual void syncTouch(nsecs_t when, bool* outHavePointerIds);
+//    virtual void syncTouch(nsecs_t when, bool* outHavePointerIds);
+ virtual void syncTouch(nsecs_t when, bool* outHavePointerIds,int32_t width,int32_t height,char scale);
     virtual void configureRawPointerAxes();
     virtual bool hasStylus() const;
 
@@ -1712,7 +1731,8 @@ public:
     virtual void process(const RawEvent* rawEvent);
 
 protected:
-    virtual void syncTouch(nsecs_t when, bool* outHavePointerIds);
+  //  virtual void syncTouch(nsecs_t when, bool* outHavePointerIds);
+virtual void syncTouch(nsecs_t when, bool* outHavePointerIds,int32_t width,int32_t height,char scale);
     virtual void configureRawPointerAxes();
     virtual bool hasStylus() const;
 

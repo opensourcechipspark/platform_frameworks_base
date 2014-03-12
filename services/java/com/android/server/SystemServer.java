@@ -55,6 +55,7 @@ import com.android.server.content.ContentService;
 import com.android.server.display.DisplayManagerService;
 import com.android.server.dreams.DreamManagerService;
 import com.android.server.input.InputManagerService;
+import com.android.server.media.MediaRouterService;
 import com.android.server.net.NetworkPolicyManagerService;
 import com.android.server.net.NetworkStatsService;
 import com.android.server.os.SchedulingPolicyService;
@@ -137,7 +138,8 @@ class ServerThread {
         NetworkStatsService networkStats = null;
         NetworkPolicyManagerService networkPolicy = null;
         ConnectivityService connectivity = null;
-        WifiP2pService wifiP2p = null;
+        EthernetService eth = null;
+		WifiP2pService wifiP2p = null;
         WifiService wifi = null;
         NsdService serviceDiscovery= null;
         IPackageManager pm = null;
@@ -328,6 +330,8 @@ class ServerThread {
                 Slog.i(TAG, "No Bluetooh Service (emulator)");
             } else if (factoryTest == SystemServer.FACTORY_TEST_LOW_LEVEL) {
                 Slog.i(TAG, "No Bluetooth Service (factory test)");
+			} else if (SystemProperties.get("ro.rk.bt_enable", "true").equals("false")) {
+		        Slog.i(TAG, "No Bluetooth Service (not support)");
             } else if (!context.getPackageManager().hasSystemFeature
                        (PackageManager.FEATURE_BLUETOOTH)) {
                 Slog.i(TAG, "No Bluetooth Service (Bluetooth Hardware Not Present)");
@@ -356,6 +360,7 @@ class ServerThread {
         DreamManagerService dreamy = null;
         AssetAtlasService atlas = null;
         PrintManagerService printManager = null;
+        MediaRouterService mediaRouter = null;
 
         // Bring up services needed for UI.
         if (factoryTest != SystemServer.FACTORY_TEST_LOW_LEVEL) {
@@ -521,7 +526,23 @@ class ServerThread {
                 } catch (Throwable e) {
                     reportWtf("starting Connectivity Service", e);
                 }
-
+            if (SystemProperties.get("ro.rk.ethernet_enable", "true").equals("true")) {
+							try {
+												 Slog.i(TAG, "Ethernet Service");
+												 eth = new EthernetService(context);
+												 ServiceManager.addService(Context.ETHERNET_SERVICE, eth);
+											 } catch (Throwable e) {
+																 reportWtf("starting Ethernet Service", e);
+															 }
+															 
+															 /*int ethOn = Settings.Secure.getInt(mContentResolver,
+																 Settings.Secure.ETHERNET_ON, 1);
+															 if (ethOn == 1) {
+										eth.setEthernetEnabled(true);
+																			 } else  {
+																 eth.setEthernetEnabled(false);
+																							 }*/
+																				            }		
                 try {
                     Slog.i(TAG, "Network Service Discovery Service");
                     serviceDiscovery = NsdService.create(context);
@@ -804,6 +825,16 @@ class ServerThread {
             } catch (Throwable e) {
                 reportWtf("starting Print Service", e);
             }
+
+            if (!disableNonCoreServices) {
+                try {
+                    Slog.i(TAG, "Media Router Service");
+                    mediaRouter = new MediaRouterService(context);
+                    ServiceManager.addService(Context.MEDIA_ROUTER_SERVICE, mediaRouter);
+                } catch (Throwable e) {
+                    reportWtf("starting MediaRouterService", e);
+                }
+            }
         }
 
         // Before things start rolling, be sure we have decided whether
@@ -916,6 +947,7 @@ class ServerThread {
         final InputManagerService inputManagerF = inputManager;
         final TelephonyRegistry telephonyRegistryF = telephonyRegistry;
         final PrintManagerService printManagerF = printManager;
+        final MediaRouterService mediaRouterF = mediaRouter;
 
         // We now tell the activity manager it is okay to run third party
         // code.  It will call back into us once it has gotten to the state
@@ -1062,6 +1094,12 @@ class ServerThread {
                     if (printManagerF != null) printManagerF.systemRuning();
                 } catch (Throwable e) {
                     reportWtf("Notifying PrintManagerService running", e);
+                }
+
+                try {
+                    if (mediaRouterF != null) mediaRouterF.systemRunning();
+                } catch (Throwable e) {
+                    reportWtf("Notifying MediaRouterService running", e);
                 }
             }
         });

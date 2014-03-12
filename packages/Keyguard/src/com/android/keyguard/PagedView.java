@@ -82,13 +82,13 @@ public abstract class PagedView extends ViewGroup implements ViewGroup.OnHierarc
 
     private static final float RETURN_TO_ORIGINAL_PAGE_THRESHOLD = 0.33f;
     // The page is moved more than halfway, automatically move to the next page on touch up.
-    private static final float SIGNIFICANT_MOVE_THRESHOLD = 0.4f;
+    private static final float SIGNIFICANT_MOVE_THRESHOLD = 0.5f;
 
     // The following constants need to be scaled based on density. The scaled versions will be
     // assigned to the corresponding member variables below.
-    private static final int FLING_THRESHOLD_VELOCITY = 500;
+    private static final int FLING_THRESHOLD_VELOCITY = 1500;
     private static final int MIN_SNAP_VELOCITY = 1500;
-    private static final int MIN_FLING_VELOCITY = 250;
+    private static final int MIN_FLING_VELOCITY = 500;
 
     // We are disabling touch interaction of the widget region for factory ROM.
     private static final boolean DISABLE_TOUCH_INTERACTION = false;
@@ -1938,10 +1938,12 @@ public abstract class PagedView extends ViewGroup implements ViewGroup.OnHierarc
 
         if (isWarping()) {
             dispatchOnPageEndWarp();
+            notifyPageSwitching(whichPage);
             resetPageWarp();
+        } else {
+            notifyPageSwitching(whichPage);
         }
 
-        notifyPageSwitching(whichPage);
         View focusedChild = getFocusedChild();
         if (focusedChild != null && whichPage != mCurrentPage &&
                 focusedChild == getPageAt(mCurrentPage)) {
@@ -2725,7 +2727,7 @@ public abstract class PagedView extends ViewGroup implements ViewGroup.OnHierarc
     };
 
     private void cancelWarpAnimation(String msg, boolean abortAnimation) {
-        if (DEBUG_WARP) Log.v(TAG, "cancelWarpAnimation(" + msg + ")");
+        if (DEBUG_WARP) Log.v(TAG, "cancelWarpAnimation(" + msg + ",abort=" + abortAnimation + ")");
         if (abortAnimation) {
             // We're done with the animation and moving to a new page.  Let the scroller
             // take over the animation.

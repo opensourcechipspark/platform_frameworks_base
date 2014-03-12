@@ -539,6 +539,8 @@ static M4OSA_ERR checkClipVideoProfileAndLevel(M4DECODER_VideoDecoders *pDecoder
         }
 
         if (foundCodec) {
+            return M4NO_ERROR;
+#if 0
             VideoComponentCapabilities* pComponent = pVideoDecoder->component;
             for (size_t i = 0; i < pVideoDecoder->componentNumber; i++) {
                 if (pComponent != M4OSA_NULL) {
@@ -561,6 +563,7 @@ static M4OSA_ERR checkClipVideoProfileAndLevel(M4DECODER_VideoDecoders *pDecoder
                 }
                 pComponent++;
             }
+#endif
         }
     }
 

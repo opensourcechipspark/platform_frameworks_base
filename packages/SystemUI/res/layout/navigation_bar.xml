@@ -42,6 +42,14 @@
             >
 
             <!-- navigation controls -->
+              <com.android.systemui.statusbar.policy.KeyButtonView
+                  android:id="@+id/screenshot"
+                  android:layout_width="40dp"
+                  android:layout_height="match_parent"
+                  android:src="@drawable/capture"
+                  android:layout_weight="0"
+                  android:contentDescription="@string/accessibility_recent"
+                  systemui:glowBackground="@drawable/ic_sysbar_highlight" />			
             <View
                 android:layout_width="40dp"
                 android:layout_height="match_parent"
@@ -96,7 +104,7 @@
                 android:layout_weight="0"
                 android:visibility="invisible"
                 android:contentDescription="@string/accessibility_menu"
-                systemui:glowBackground="@drawable/ic_sysbar_highlight"
+                systemui:glowBackground="@drawable/ic_sysbar_highlight"				
                 />
         </LinearLayout>
 
@@ -202,7 +210,7 @@
             android:animateLayoutChanges="true"
             >
             
-            <!-- navigation controls -->
+            <!-- navigation controls -->			
             <com.android.systemui.statusbar.policy.KeyButtonView android:id="@+id/menu"
                 android:layout_height="40dp"
                 android:layout_width="match_parent"
@@ -259,6 +267,14 @@
                 android:layout_weight="0"
                 android:visibility="invisible"
                 />
+              <com.android.systemui.statusbar.policy.KeyButtonView
+                  android:id="@+id/screenshot"
+                  android:layout_width="40dp"
+                  android:layout_height="match_parent"
+                  android:src="@drawable/capture"
+                  android:layout_weight="0"
+                  android:contentDescription="@string/accessibility_recent"
+                  systemui:glowBackground="@drawable/ic_sysbar_highlight" />				
         </LinearLayout>
 
         <!-- lights out layout to match exactly -->
@@ -311,7 +327,7 @@
             android:layout_height="80dp"
             android:layout_width="match_parent"
             android:layout_gravity="center_vertical"
-            android:src="@drawable/search_light"
+            android:src="@drawable/search_light_land"
             android:scaleType="center"
             android:visibility="gone"
             android:contentDescription="@string/accessibility_search_light"

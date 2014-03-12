@@ -267,6 +267,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     boolean mSystemReady;
     boolean mSystemBooted;
     boolean mHdmiPlugged;
+
+    // add for vga
+    boolean mVgaPlugged;
+
     int mUiMode;
     int mDockMode = Intent.EXTRA_DOCK_STATE_UNDOCKED;
     int mLidOpenRotation;
@@ -929,6 +933,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         // register for multiuser-relevant broadcasts
         filter = new IntentFilter(Intent.ACTION_USER_SWITCHED);
         context.registerReceiver(mMultiuserReceiver, filter);
+		//register for screenshot
+		IntentFilter intentfilter=new IntentFilter();
+		intentfilter.addAction("rk.android.screenshot.action");
+		context.registerReceiver(mScreenshotReceiver, intentfilter);        
 
         // monitor for system gestures
         mSystemGestures = new SystemGesturesPointerEventListener(context,
@@ -979,6 +987,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         // Controls rotation and the like.
         initializeHdmiState();
 
+        initializeVgaState();
+
         // Match current screen state.
         if (mPowerManager.isScreenOn()) {
             screenTurningOn(null);
@@ -1007,7 +1017,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mDoubleTapOnHomeBehavior = LONG_PRESS_HOME_NOTHING;
         }
     }
-
+	private BroadcastReceiver mScreenshotReceiver=new BroadcastReceiver() {
+				@Override
+				public void onReceive(Context context, Intent intent) {
+							Log.d(TAG,"------tack snapshot---");
+							takeScreenshot();
+							}
+						};
     @Override
     public void setInitialDisplaySize(Display display, int width, int height, int density) {
         // This method might be called before the policy has been fully initialized
@@ -1070,6 +1086,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         // Allow the navigation bar to move on small devices (phones).
         mNavigationBarCanMove = shortSizeDp < 600;
 
+		if(SystemProperties.get("ro.rk.small_screen","false").equals("true")){
+		 mNavigationBarCanMove=false;		
+		}
+
         mHasNavigationBar = res.getBoolean(com.android.internal.R.bool.config_showNavigationBar);
         // Allow a system property to override this. Used by the emulator.
         // See also hasNavigationBar().
@@ -1087,7 +1107,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         } else {
             mDemoHdmiRotation = mLandscapeRotation;
         }
-        mDemoHdmiRotationLock = SystemProperties.getBoolean("persist.demo.hdmirotationlock", false);
+        mDemoHdmiRotationLock = SystemProperties.getBoolean("persist.demo.hdmirotationlock", true);
 
         // Only force the default orientation if the screen is xlarge, at least 960dp x 720dp, per
         // http://developer.android.com/guide/practices/screens_support.html#range
@@ -2728,6 +2748,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             // decided that it can't be hidden (because of the screen aspect ratio),
             // then take that into account.
             navVisible |= !canHideNavigationBar();
+			if((mLastSystemUiFlags & View.SYSTEM_UI_FLAG_SHOW_FULLSCREEN) != 0){
+				navVisible = false;
+            }
 
             boolean updateSysUiVisibility = false;
             if (mNavigationBar != null) {
@@ -3468,6 +3491,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 }
                 // Maintain fullscreen layout until incoming animation is complete.
                 topIsFullscreen = mTopIsFullscreen && mStatusBar.isAnimatingLw();
+                // Transient status bar on the lockscreen is not allowed
+                if (mForceStatusBarFromKeyguard && mStatusBarController.isTransientShowing()) {
+                    mStatusBarController.updateVisibilityLw(false /*transientAllowed*/,
+                            mLastSystemUiFlags, mLastSystemUiFlags);
+                }
             } else if (mTopFullscreenOpaqueWindowState != null) {
                 if (localLOGV) {
                     Slog.d(TAG, "frame: " + mTopFullscreenOpaqueWindowState.getFrameLw()
@@ -3660,6 +3688,14 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         // Always do this so the sticky intent is stuck (to false) if there is no hdmi.
         mHdmiPlugged = !plugged;
         setHdmiPlugged(!mHdmiPlugged);
+    }
+
+    void initializeVgaState() {
+	Log.d(TAG, "initializeVgaState");
+	if (new File("/sys/devices/virtual/switch/vga/state").exists()){
+		Log.d(TAG, "mVgaPlugged=true");
+		mVgaPlugged = true;
+	}
     }
 
     /**
@@ -4460,10 +4496,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 // enable 180 degree rotation while docked.
                 preferredRotation = mDeskDockEnablesAccelerometer
                         ? sensorRotation : mDeskDockRotation;
-            } else if (mHdmiPlugged && mDemoHdmiRotationLock) {
+            } else if ((mHdmiPlugged && mDemoHdmiRotationLock) || mVgaPlugged) {
                 // Ignore sensor when plugged into HDMI when demo HDMI rotation lock enabled.
                 // Note that the dock orientation overrides the HDMI orientation.
                 preferredRotation = mDemoHdmiRotation;
+		Log.d(TAG,"Hdmi or Vga plugged,lock orientation");
             } else if (mHdmiPlugged && mDockMode == Intent.EXTRA_DOCK_STATE_UNDOCKED
                     && mUndockedHdmiRotation >= 0) {
                 // Ignore sensor when plugged into HDMI and an undocked orientation has
@@ -5158,9 +5195,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 mNavigationBar != null &&
                 hideNavBarSysui && immersiveSticky;
 
-        boolean denyTransientStatus = mStatusBarController.isTransientShowing()
+        boolean denyTransientStatus = mStatusBarController.isTransientShowRequested()
                 && !transientStatusBarAllowed && hideStatusBarSysui;
-        boolean denyTransientNav = mNavigationBarController.isTransientShowing()
+        boolean denyTransientNav = mNavigationBarController.isTransientShowRequested()
                 && !transientNavBarAllowed;
         if (denyTransientStatus || denyTransientNav) {
             // clear the clearable flags instead

@@ -39,8 +39,9 @@ import android.view.ViewConfiguration;
 import android.view.ViewDebug;
 import android.view.accessibility.AccessibilityEvent;
 import android.widget.ImageView;
-
-import com.android.systemui.R;
+import android.media.AudioManager;
+import android.os.Handler;
+import android.os.Message;import com.android.systemui.R;
 
 public class KeyButtonView extends ImageView {
     private static final String TAG = "StatusBar.KeyButtonView";
@@ -62,6 +63,10 @@ public class KeyButtonView extends ImageView {
     boolean mSupportsLongpress = true;
     RectF mRect = new RectF();
     AnimatorSet mPressedAnim;
+    private static int VOLUME_ADD = 24;
+    private static int VOLUME_SUB = 25;
+    boolean isDown = false;
+    private final int ADJUST_VOLUME_DELAY = 250;	
     Animator mAnimateToQuiescent = new ObjectAnimator();
 
     Runnable mCheckLongPress = new Runnable() {
@@ -303,6 +308,16 @@ public class KeyButtonView extends ImageView {
     }
 
     void sendEvent(int action, int flags, long when) {
+        if (KeyEvent.ACTION_DOWN == action
+                && (mCode == KeyEvent.KEYCODE_VOLUME_UP
+                || mCode == KeyEvent.KEYCODE_VOLUME_DOWN)) {
+            if (mCode == KeyEvent.KEYCODE_VOLUME_UP) {
+                ajustVolume(true);
+            } else {
+                ajustVolume(false);
+            }
+            return;
+    	}
         final int repeatCount = (flags & KeyEvent.FLAG_LONG_PRESS) != 0 ? 1 : 0;
         final KeyEvent ev = new KeyEvent(mDownTime, when, action, mCode, repeatCount,
                 0, KeyCharacterMap.VIRTUAL_KEYBOARD, 0,
@@ -311,6 +326,50 @@ public class KeyButtonView extends ImageView {
         InputManager.getInstance().injectInputEvent(ev,
                 InputManager.INJECT_INPUT_EVENT_MODE_ASYNC);
     }
+    
+    public void ajustVolume(boolean opition) {
+		        AudioManager audioManager = (AudioManager) getContext().getSystemService(
+		                Context.AUDIO_SERVICE);
+		        if (audioManager != null) {
+				          //
+				            // Adjust the volume in on key down since it is more
+				            // responsive to the user.
+				            //
+				         if (opition) {
+					           audioManager.adjustSuggestedStreamVolume(
+						       AudioManager.ADJUST_RAISE,
+					           AudioManager.USE_DEFAULT_STREAM_TYPE,
+						       AudioManager.FLAG_SHOW_UI | AudioManager.FLAG_REMOVE_SOUND_AND_VIBRATE);
+						           } else {
+						             audioManager.adjustSuggestedStreamVolume(
+				                     AudioManager.ADJUST_LOWER,
+							         AudioManager.USE_DEFAULT_STREAM_TYPE,
+								     AudioManager.FLAG_SHOW_UI | AudioManager.FLAG_REMOVE_SOUND_AND_VIBRATE);
+								          }
+							         }
+								    }
+								
+			   private Handler mAddHandler = new Handler();
+					   private Runnable mAddRun = new Runnable() {
+					          public void run() {
+										      mAddHandler.removeCallbacks(mAddRun);
+										      if (isDown) {
+												       ajustVolume(true);
+												       mAddHandler.postDelayed(mAddRun, ADJUST_VOLUME_DELAY);
+														            }
+														        }
+														    };
+														
+						      private Handler mSubHandler = new Handler();
+							   private Runnable mSubRun = new Runnable() {
+										   public void run() {
+							                     mSubHandler.removeCallbacks(mSubRun);
+																      if (isDown) {
+														          ajustVolume(false);
+													              mSubHandler.postDelayed(mSubRun, ADJUST_VOLUME_DELAY);
+																				            }
+																				        }
+																				    };	
 }
 
 

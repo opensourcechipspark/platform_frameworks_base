@@ -62,7 +62,14 @@ import java.io.File;
 import java.io.OutputStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import android.os.SystemProperties;
+import android.os.UserHandle; 
+import android.util.Log;
+import android.provider.Settings;
 
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
 /**
  * POD used in the AsyncTask which saves an image in the background.
  */
@@ -94,7 +101,8 @@ class SaveImageInBackgroundTask extends AsyncTask<SaveImageInBackgroundData, Voi
     private static final String SCREENSHOTS_DIR_NAME = "Screenshots";
     private static final String SCREENSHOT_FILE_NAME_TEMPLATE = "Screenshot_%s.png";
     private static final String SCREENSHOT_SHARE_SUBJECT_TEMPLATE = "Screenshot (%s)";
-
+    private static final String SCREENSHOT_FILE_PATH_TEMPLATE = "%s/%s/%s/%s";
+    private static final String SCREENSHOT_FILE_PATH_TEMPLATE_UMS = "%s/%s/%s";
     private final int mNotificationId;
     private final NotificationManager mNotificationManager;
     private final Notification.Builder mNotificationBuilder;
@@ -121,16 +129,25 @@ class SaveImageInBackgroundTask extends AsyncTask<SaveImageInBackgroundData, Voi
         mImageTime = System.currentTimeMillis();
         String imageDate = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(new Date(mImageTime));
         mImageFileName = String.format(SCREENSHOT_FILE_NAME_TEMPLATE, imageDate);
-
+        String imageDir = Settings.System.getString(context.getContentResolver(), Settings.System.SCREENSHOT_LOCATION);
         mScreenshotDir = new File(Environment.getExternalStoragePublicDirectory(
                 Environment.DIRECTORY_PICTURES), SCREENSHOTS_DIR_NAME);
-        mImageFilePath = new File(mScreenshotDir, mImageFileName).getAbsolutePath();
-
+      //  mImageFilePath = new File(mScreenshotDir, mImageFileName).getAbsolutePath();
+        boolean hasUMS = "true".equals(SystemProperties.get("ro.factory.hasUMS", "false"));
+        if (!hasUMS) {
+            mImageFilePath = String.format(SCREENSHOT_FILE_PATH_TEMPLATE, imageDir,UserHandle.myUserId(),
+                    SCREENSHOTS_DIR_NAME, mImageFileName);
+        } else {
+            mImageFilePath = String.format(SCREENSHOT_FILE_PATH_TEMPLATE_UMS, imageDir,
+                    SCREENSHOTS_DIR_NAME, mImageFileName);
+        }
         // Create the large notification icon
         mImageWidth = data.image.getWidth();
         mImageHeight = data.image.getHeight();
         int iconSize = data.iconSize;
-
+        Log.d(">>>>>>>>>>>>>","imageDir="+imageDir);
+		Log.d(">>>>>>>>>>>>>","mImageFilePath="+mImageFilePath);
+		 Log.d(">>>>>>>>>>>>>","mImageFileName="+mImageFileName);
         final int shortSide = mImageWidth < mImageHeight ? mImageWidth : mImageHeight;
         Bitmap preview = Bitmap.createBitmap(shortSide, shortSide, data.image.getConfig());
         Canvas c = new Canvas(preview);
@@ -174,6 +191,29 @@ class SaveImageInBackgroundTask extends AsyncTask<SaveImageInBackgroundData, Voi
         // But we still don't set it for the expanded view, allowing the smallIcon to show here.
         mNotificationStyle.bigLargeIcon(null);
     }
+
+        public void saveMyBitmap(Bitmap mBitmap ,String savePath ) throws Exception {
+            File f = new File(savePath);
+            if(!f.exists())
+            	f.createNewFile();
+            FileOutputStream fOut = null;
+            try {
+                    fOut = new FileOutputStream(f);
+            } catch (FileNotFoundException e) {
+                    e.printStackTrace();
+            }
+            mBitmap.compress(Bitmap.CompressFormat.PNG, 100, fOut);
+            try {
+                    fOut.flush();
+            } catch (IOException e) {
+                    e.printStackTrace();
+            }
+            try {
+                    fOut.close();
+            } catch (IOException e) {
+                    e.printStackTrace();
+            }
+    	} 
 
     @Override
     protected SaveImageInBackgroundData doInBackground(SaveImageInBackgroundData... params) {
@@ -230,11 +270,11 @@ class SaveImageInBackgroundTask extends AsyncTask<SaveImageInBackgroundData, Voi
                      r.getString(com.android.internal.R.string.share),
                      PendingIntent.getActivity(context, 0, chooserIntent,
                              PendingIntent.FLAG_CANCEL_CURRENT));
-
-            OutputStream out = resolver.openOutputStream(uri);
-            image.compress(Bitmap.CompressFormat.PNG, 100, out);
-            out.flush();
-            out.close();
+            //OutputStream out = resolver.openOutputStream(uri);
+            //image.compress(Bitmap.CompressFormat.PNG, 100, out);
+            //out.flush();
+            //out.close();
+            saveMyBitmap(image,mImageFilePath);
 
             // update file size in the database
             values.clear();
@@ -247,6 +287,7 @@ class SaveImageInBackgroundTask extends AsyncTask<SaveImageInBackgroundData, Voi
         } catch (Exception e) {
             // IOException/UnsupportedOperationException may be thrown if external storage is not
             // mounted
+            e.printStackTrace();
             params[0].clearImage();
             params[0].result = 1;
         }
@@ -448,6 +489,7 @@ class GlobalScreenshot {
             dims[1] = Math.abs(dims[1]);
         }
 
+        Log.d("tests", "takeScreenshot, dims, w-h: "+dims[0]+"-"+dims[1]+"; dm w-h: "+mDisplayMetrics.widthPixels+mDisplayMetrics.heightPixels);
         // Take the screenshot
         mScreenBitmap = SurfaceControl.screenshot((int) dims[0], (int) dims[1]);
         if (mScreenBitmap == null) {

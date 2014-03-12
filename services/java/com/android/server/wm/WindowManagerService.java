@@ -285,6 +285,8 @@ public class WindowManagerService extends IWindowManager.Stub
 
     private static final String SYSTEM_SECURE = "ro.secure";
     private static final String SYSTEM_DEBUGGABLE = "ro.debuggable";
+    private static final String WINDOW_FAKE_ROTATION = "ro.sf.fakerotation";
+    private static final String WINDOW_ROTATION_DEGREES = "ro.sf.hwrotation";
 
     private static final String DENSITY_OVERRIDE = "ro.config.density_override";
     private static final String SIZE_OVERRIDE = "ro.config.size_override";
@@ -408,6 +410,11 @@ public class WindowManagerService extends IWindowManager.Stub
      */
     WindowState[] mRebuildTmp = new WindowState[20];
 
+    /**
+     * Check product characteristics.
+     */
+    boolean mIsTabletEnv;
+
     IInputMethodManager mInputMethodManager;
 
     DisplayMagnifier mDisplayMagnifier;
@@ -437,6 +444,8 @@ public class WindowManagerService extends IWindowManager.Stub
     int mRotation = 0;
     int mForcedAppOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
     boolean mAltOrientation = false;
+    boolean mRotateOnBoot = false;
+    boolean mFirstRotate = false;
     ArrayList<IRotationWatcher> mRotationWatchers
             = new ArrayList<IRotationWatcher>();
     int mDeferredRotationPauseCount;
@@ -538,6 +547,8 @@ public class WindowManagerService extends IWindowManager.Stub
 
     float mWindowAnimationScale = 1.0f;
     float mTransitionAnimationScale = 1.0f;
+    float mWindowAnimationScaleBackup = 1.0f;
+    float mTransitionAnimationScaleBackup = 1.0f;
     float mAnimatorDurationScale = 1.0f;
 
     final InputManagerService mInputManager;
@@ -578,10 +589,13 @@ public class WindowManagerService extends IWindowManager.Stub
         private boolean mUpdateRotation = false;
         boolean mWallpaperActionPending = false;
 
-        private static final int DISPLAY_CONTENT_UNKNOWN = 0;
-        private static final int DISPLAY_CONTENT_MIRROR = 1;
-        private static final int DISPLAY_CONTENT_UNIQUE = 2;
-        private int mDisplayHasContent = DISPLAY_CONTENT_UNKNOWN;
+        // Set to true when the display contains content to show the user.
+        // When false, the display manager may choose to mirror or blank the display.
+        boolean mDisplayHasContent = false;
+
+        // Only set while traversing the default display based on its content.
+        // Affects the behavior of mirroring on secondary displays.
+        boolean mObscureApplicationContentOnSecondaryDisplays = false;
     }
     final LayoutFields mInnerFields = new LayoutFields();
 
@@ -724,6 +738,17 @@ public class WindowManagerService extends IWindowManager.Stub
             DisplayManagerService displayManager, InputManagerService inputManager,
             boolean haveInputMethods, boolean showBootMsgs, boolean onlyCore) {
         mContext = context;
+        float configWindowAnimationScale = Float.parseFloat(mContext.getResources()
+            .getString(com.android.internal.R.string.config_window_animation_scale));
+        float configTransitionAnimationScale = Float.parseFloat(mContext.getResources()
+            .getString(com.android.internal.R.string.config_transition_animation_scale));
+        float configAnimatorDurationScale = Float.parseFloat(mContext.getResources()
+            .getString(com.android.internal.R.string.config_animator_duration_scale));
+        mWindowAnimationScale = configWindowAnimationScale;
+        mTransitionAnimationScale = configTransitionAnimationScale;
+        mWindowAnimationScaleBackup = configWindowAnimationScale;
+        mTransitionAnimationScaleBackup = configTransitionAnimationScale;
+        mAnimatorDurationScale = configAnimatorDurationScale;
         mHaveInputMethods = haveInputMethods;
         mAllowBootMessages = showBootMsgs;
         mOnlyCore = onlyCore;
@@ -786,6 +811,8 @@ public class WindowManagerService extends IWindowManager.Stub
 
         mAnimator = new WindowAnimator(this);
 
+        mRotateOnBoot = isWindowFakeRotation();
+        mIsTabletEnv = isTabletEnv();
         initPolicy(UiThread.getHandler());
 
         // Add ourself to the Watchdog monitors.
@@ -3394,16 +3421,17 @@ public class WindowManagerService extends IWindowManager.Stub
         if (stack == null) {
             throw new IllegalArgumentException("addAppToken: invalid stackId=" + stackId);
         }
+        EventLog.writeEvent(EventLogTags.WM_TASK_CREATED, taskId, stackId);
         Task task = new Task(atoken, stack, userId);
         mTaskIdToTask.put(taskId, task);
         stack.addTask(task, true);
-        stack.getDisplayContent().moveStack(stack, true);
         return task;
     }
 
     @Override
     public void addAppToken(int addPos, IApplicationToken token, int taskId, int stackId,
-            int requestedOrientation, boolean fullscreen, boolean showWhenLocked, int userId) {
+            int requestedOrientation, boolean fullscreen, boolean showWhenLocked, int userId,
+            int configChanges) {
         if (!checkCallingPermission(android.Manifest.permission.MANAGE_APP_TOKENS,
                 "addAppToken()")) {
             throw new SecurityException("Requires MANAGE_APP_TOKENS permission");
@@ -3435,6 +3463,8 @@ public class WindowManagerService extends IWindowManager.Stub
             atoken.appFullscreen = fullscreen;
             atoken.showWhenLocked = showWhenLocked;
             atoken.requestedOrientation = requestedOrientation;
+            atoken.layoutConfigChanges = (configChanges &
+                    (ActivityInfo.CONFIG_SCREEN_SIZE | ActivityInfo.CONFIG_ORIENTATION)) != 0;
             if (DEBUG_TOKEN_MOVEMENT || DEBUG_ADD_REMOVE) Slog.v(TAG, "addAppToken: " + atoken
                     + " to stack=" + stackId + " task=" + taskId + " at " + addPos);
 
@@ -4303,10 +4333,6 @@ public class WindowManagerService extends IWindowManager.Stub
             // If we are preparing an app transition, then delay changing
             // the visibility of this token until we execute that transition.
             if (okToDisplay() && mAppTransition.isTransitionSet()) {
-                // Already in requested state, don't do anything more.
-                if (wtoken.hiddenRequested != visible) {
-                    return;
-                }
                 wtoken.hiddenRequested = !visible;
 
                 if (!wtoken.startingDisplayed) {
@@ -4792,7 +4818,6 @@ public class WindowManagerService extends IWindowManager.Stub
                     displayContent.moveHomeStackBox(isHomeStackTask);
                 }
                 stack.moveTaskToTop(task);
-                displayContent.moveStack(stack, true);
             }
         } finally {
             Binder.restoreCallingIdentity(origId);
@@ -4846,7 +4871,6 @@ public class WindowManagerService extends IWindowManager.Stub
                         weight);
                 if (stack != null) {
                     mStackIdToStack.put(stackId, stack);
-                    displayContent.moveStack(stack, true);
                     performLayoutAndPlaceSurfacesLocked();
                     return;
                 }
@@ -4878,6 +4902,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 return;
             }
             final TaskStack stack = task.mStack;
+            EventLog.writeEvent(EventLogTags.WM_TASK_REMOVED, taskId, "removeTask");
             stack.removeTask(task);
             stack.getDisplayContent().layoutNeeded = true;
         }
@@ -5361,19 +5386,25 @@ public class WindowManagerService extends IWindowManager.Stub
                 pw.flush();
                 Slog.i(TAG, sw.toString());
             }
-            try {
-                IBinder surfaceFlinger = ServiceManager.getService("SurfaceFlinger");
-                if (surfaceFlinger != null) {
-                    //Slog.i(TAG, "******* TELLING SURFACE FLINGER WE ARE BOOTED!");
-                    Parcel data = Parcel.obtain();
-                    data.writeInterfaceToken("android.ui.ISurfaceComposer");
-                    surfaceFlinger.transact(IBinder.FIRST_CALL_TRANSACTION, // BOOT_FINISHED
-                                            data, null, 0);
-                    data.recycle();
+
+            if (!mRotateOnBoot) {
+                try {
+                    IBinder surfaceFlinger = ServiceManager.getService("SurfaceFlinger");
+                    if (surfaceFlinger != null) {
+                        //Slog.i(TAG, "******* TELLING SURFACE FLINGER WE ARE BOOTED!");
+                        Parcel data = Parcel.obtain();
+                        data.writeInterfaceToken("android.ui.ISurfaceComposer");
+                        surfaceFlinger.transact(IBinder.FIRST_CALL_TRANSACTION, // BOOT_FINISHED
+                                                data, null, 0);
+                        data.recycle();
+                    }
+                } catch (RemoteException ex) {
+                    Slog.e(TAG, "Boot completed: SurfaceFlinger is dead!");
                 }
-            } catch (RemoteException ex) {
-                Slog.e(TAG, "Boot completed: SurfaceFlinger is dead!");
             }
+
+            // Set flag first rotate in order to expand duration of window freeze timeout.
+            mFirstRotate = true;
 
             // Enable input dispatch.
             mInputMonitor.setEventDispatchingLw(mEventDispatchingEnabled);
@@ -5682,6 +5713,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 // The screen shot will contain the entire screen.
                 dw = (int)(dw*scale);
                 dh = (int)(dh*scale);
+
                 if (rot == Surface.ROTATION_90 || rot == Surface.ROTATION_270) {
                     int tmp = dw;
                     dw = dh;
@@ -5714,7 +5746,9 @@ public class WindowManagerService extends IWindowManager.Stub
         Bitmap bm = Bitmap.createBitmap(width, height, force565 ? Config.RGB_565 : rawss.getConfig());
         frame.scale(scale);
         Matrix matrix = new Matrix();
+
         ScreenRotationAnimation.createRotationMatrix(rot, dw, dh, matrix);
+
         // TODO: Test for RTL vs. LTR and use frame.right-width instead of -frame.left
         matrix.postTranslate(-FloatMath.ceil(frame.left), -FloatMath.ceil(frame.top));
         Canvas canvas = new Canvas(bm);
@@ -5908,6 +5942,11 @@ public class WindowManagerService extends IWindowManager.Stub
                     + " metrics");
         }
 
+        if (mRotateOnBoot) {
+             mRotation = Surface.ROTATION_0;
+             rotation = Surface.ROTATION_90;
+        }
+
         if (mRotation == rotation && mAltOrientation == altOrientation) {
             // No change.
             return false;
@@ -5926,7 +5965,13 @@ public class WindowManagerService extends IWindowManager.Stub
 
         mWindowsFreezingScreen = true;
         mH.removeMessages(H.WINDOW_FREEZE_TIMEOUT);
-        mH.sendEmptyMessageDelayed(H.WINDOW_FREEZE_TIMEOUT, WINDOW_FREEZE_TIMEOUT_DURATION);
+        if (mFirstRotate) {
+            mH.sendEmptyMessageDelayed(H.WINDOW_FREEZE_TIMEOUT, 5000);
+            mFirstRotate = false;
+        } else {
+            mH.sendEmptyMessageDelayed(H.WINDOW_FREEZE_TIMEOUT, WINDOW_FREEZE_TIMEOUT_DURATION);
+        }
+
         mWaitingForConfig = true;
         final DisplayContent displayContent = getDefaultDisplayContentLocked();
         displayContent.layoutNeeded = true;
@@ -5940,6 +5985,24 @@ public class WindowManagerService extends IWindowManager.Stub
         // startFreezingDisplayLocked can reset the ScreenRotationAnimation.
         screenRotationAnimation =
                 mAnimator.getScreenRotationAnimationLocked(Display.DEFAULT_DISPLAY);
+
+        if (mRotateOnBoot) {
+            try {
+                IBinder surfaceFlinger = ServiceManager.getService("SurfaceFlinger");
+                if (surfaceFlinger != null) {
+                    //Slog.i(TAG, "******* TELLING SURFACE FLINGER WE ARE BOOTED!");
+                    Parcel data = Parcel.obtain();
+                    data.writeInterfaceToken("android.ui.ISurfaceComposer");
+                    surfaceFlinger.transact(IBinder.FIRST_CALL_TRANSACTION,
+                                            data, null, 0);
+                    data.recycle();
+                }
+            } catch (RemoteException ex) {
+                Slog.e(TAG, "Boot completed: SurfaceFlinger is dead!");
+            }
+            // Waiting for boot animation to finish;
+            SystemClock.sleep(1000);
+        }
 
         // We need to update our screen size information to match the new
         // rotation.  Note that this is redundant with the later call to
@@ -6162,6 +6225,14 @@ public class WindowManagerService extends IWindowManager.Stub
     private boolean isSystemSecure() {
         return "1".equals(SystemProperties.get(SYSTEM_SECURE, "1")) &&
                 "0".equals(SystemProperties.get(SYSTEM_DEBUGGABLE, "0"));
+    }
+
+    private boolean isWindowFakeRotation() {
+        return "true".equals(SystemProperties.get(WINDOW_FAKE_ROTATION, "false"));
+    }
+
+    private boolean isTabletEnv() {
+        return (SystemProperties.getInt(WINDOW_ROTATION_DEGREES,0) % 180 ) == 90;
     }
 
     /**
@@ -6647,6 +6718,7 @@ public class WindowManagerService extends IWindowManager.Stub
         if (config != null) {
             config.orientation = (dw <= dh) ? Configuration.ORIENTATION_PORTRAIT :
                     Configuration.ORIENTATION_LANDSCAPE;
+            config.rotation = mRotation;
         }
 
         // Update application display metrics.
@@ -8269,7 +8341,9 @@ public class WindowManagerService extends IWindowManager.Stub
             // windows, since that means "perform layout as normal,
             // just don't display").
             if (!gone || !win.mHaveFrame || win.mLayoutNeeded
-                    || (win.mAttrs.type == TYPE_KEYGUARD && win.isConfigChanged())
+                    || ((win.isConfigChanged() || win.setInsetsChanged()) &&
+                            (win.mAttrs.type == TYPE_KEYGUARD ||
+                            win.mAppToken != null && win.mAppToken.layoutConfigChanges))
                     || win.mAttrs.type == TYPE_UNIVERSE_BACKGROUND) {
                 if (!win.mLayoutAttached) {
                     if (initial) {
@@ -8703,12 +8777,7 @@ public class WindowManagerService extends IWindowManager.Stub
     private void updateResizingWindows(final WindowState w) {
         final WindowStateAnimator winAnimator = w.mWinAnimator;
         if (w.mHasSurface && w.mLayoutSeq == mLayoutSeq) {
-            w.mOverscanInsetsChanged |=
-                    !w.mLastOverscanInsets.equals(w.mOverscanInsets);
-            w.mContentInsetsChanged |=
-                    !w.mLastContentInsets.equals(w.mContentInsets);
-            w.mVisibleInsetsChanged |=
-                    !w.mLastVisibleInsets.equals(w.mVisibleInsets);
+            w.setInsetsChanged();
             boolean configChanged = w.isConfigChanged();
             if (DEBUG_CONFIGURATION && configChanged) {
                 Slog.v(TAG, "Win " + w + " config changed: "
@@ -8783,6 +8852,14 @@ public class WindowManagerService extends IWindowManager.Stub
         final WindowManager.LayoutParams attrs = w.mAttrs;
         final int attrFlags = attrs.flags;
         final boolean canBeSeen = w.isDisplayedLw();
+        final boolean opaqueDrawn = canBeSeen && w.isOpaqueDrawn();
+
+        if (opaqueDrawn && w.isFullscreen(innerDw, innerDh)) {
+            // This window completely covers everything behind it,
+            // so we want to leave all of them as undimmed (for
+            // performance reasons).
+            mInnerFields.mObscured = true;
+        }
 
         if (w.mHasSurface) {
             if ((attrFlags&FLAG_KEEP_SCREEN_ON) != 0) {
@@ -8811,21 +8888,23 @@ public class WindowManagerService extends IWindowManager.Stub
             }
 
             if (canBeSeen) {
-                if (type == TYPE_DREAM || type == TYPE_KEYGUARD) {
-                    mInnerFields.mDisplayHasContent = LayoutFields.DISPLAY_CONTENT_MIRROR;
-                } else if (mInnerFields.mDisplayHasContent
-                        == LayoutFields.DISPLAY_CONTENT_UNKNOWN) {
-                    mInnerFields.mDisplayHasContent = LayoutFields.DISPLAY_CONTENT_UNIQUE;
+                // This function assumes that the contents of the default display are
+                // processed first before secondary displays.
+                if (w.mDisplayContent.isDefaultDisplay) {
+                    // While a dream or keyguard is showing, obscure ordinary application
+                    // content on secondary displays (by forcibly enabling mirroring unless
+                    // there is other content we want to show) but still allow opaque
+                    // keyguard dialogs to be shown.
+                    if (type == TYPE_DREAM || type == TYPE_KEYGUARD) {
+                        mInnerFields.mObscureApplicationContentOnSecondaryDisplays = true;
+                    }
+                    mInnerFields.mDisplayHasContent = true;
+                } else if (!mInnerFields.mObscureApplicationContentOnSecondaryDisplays
+                        || (mInnerFields.mObscured && type == TYPE_KEYGUARD_DIALOG)) {
+                    // Allow full screen keyguard presentation dialogs to be seen.
+                    mInnerFields.mDisplayHasContent = true;
                 }
             }
-        }
-
-        boolean opaqueDrawn = canBeSeen && w.isOpaqueDrawn();
-        if (opaqueDrawn && w.isFullscreen(innerDw, innerDh)) {
-            // This window completely covers everything behind it,
-            // so we want to leave all of them as undimmed (for
-            // performance reasons).
-            mInnerFields.mObscured = true;
         }
     }
 
@@ -8904,7 +8983,7 @@ public class WindowManagerService extends IWindowManager.Stub
         mInnerFields.mScreenBrightness = -1;
         mInnerFields.mButtonBrightness = -1;
         mInnerFields.mUserActivityTimeout = -1;
-        mInnerFields.mDisplayHasContent = LayoutFields.DISPLAY_CONTENT_UNKNOWN;
+        mInnerFields.mObscureApplicationContentOnSecondaryDisplays = false;
 
         mTransactionSequence++;
 
@@ -8939,10 +9018,8 @@ public class WindowManagerService extends IWindowManager.Stub
                 final int innerDh = displayInfo.appHeight;
                 final boolean isDefaultDisplay = (displayId == Display.DEFAULT_DISPLAY);
 
-                // Reset for each display unless we are forcing mirroring.
-                if (mInnerFields.mDisplayHasContent != LayoutFields.DISPLAY_CONTENT_MIRROR) {
-                    mInnerFields.mDisplayHasContent = LayoutFields.DISPLAY_CONTENT_UNKNOWN;
-                }
+                // Reset for each display.
+                mInnerFields.mDisplayHasContent = false;
 
                 int repeats = 0;
                 do {
@@ -9151,20 +9228,8 @@ public class WindowManagerService extends IWindowManager.Stub
                     updateResizingWindows(w);
                 }
 
-                final boolean hasUniqueContent;
-                switch (mInnerFields.mDisplayHasContent) {
-                    case LayoutFields.DISPLAY_CONTENT_MIRROR:
-                        hasUniqueContent = isDefaultDisplay;
-                        break;
-                    case LayoutFields.DISPLAY_CONTENT_UNIQUE:
-                        hasUniqueContent = true;
-                        break;
-                    case LayoutFields.DISPLAY_CONTENT_UNKNOWN:
-                    default:
-                        hasUniqueContent = false;
-                        break;
-                }
-                mDisplayManagerService.setDisplayHasContent(displayId, hasUniqueContent,
+                mDisplayManagerService.setDisplayHasContent(displayId,
+                        mInnerFields.mDisplayHasContent,
                         true /* inTraversal, must call performTraversalInTrans... below */);
 
                 getDisplayContentLocked(displayId).stopDimmingIfNeeded();
@@ -9907,6 +9972,13 @@ public class WindowManagerService extends IWindowManager.Stub
         // the screen then the whole world is changing behind the scenes.
         mPolicy.setLastInputMethodWindowLw(null, null);
 
+        if (mRotateOnBoot) {
+            mWindowAnimationScaleBackup = getAnimationScale(0);
+            mTransitionAnimationScaleBackup = getAnimationScale(1);
+            setAnimationScale(0, 0);
+            setAnimationScale(1, 0);
+        }
+
         if (mAppTransition.isTransitionSet()) {
             mAppTransition.freeze();
         }
@@ -10019,6 +10091,12 @@ public class WindowManagerService extends IWindowManager.Stub
         mH.sendEmptyMessageDelayed(H.FORCE_GC, 2000);
 
         mScreenFrozenLock.release();
+
+        if (mRotateOnBoot) {
+            setAnimationScale(0, mWindowAnimationScaleBackup);
+            setAnimationScale(1, mTransitionAnimationScaleBackup);
+            mRotateOnBoot = false;
+        }
 
         if (updateRotation) {
             if (DEBUG_ORIENTATION) Slog.d(TAG, "Performing post-rotate rotation");

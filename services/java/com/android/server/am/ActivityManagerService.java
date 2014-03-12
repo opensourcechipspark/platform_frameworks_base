@@ -994,6 +994,9 @@ public final class ActivityManagerService extends ActivityManagerNative
     int mProcessLimit = ProcessList.MAX_CACHED_APPS;
     int mProcessLimitOverride = -1;
 
+    boolean mHardwareUsePerformanceTool = false;
+    DevicePerformanceTool mDevicePerformanceTool;
+
     WindowManagerService mWindowManager;
 
     static ActivityManagerService mSelf;
@@ -1958,6 +1961,14 @@ public final class ActivityManagerService extends ActivityManagerNative
     private ActivityManagerService() {
         Slog.i(TAG, "Memory class: " + ActivityManager.staticGetMemoryClass());
 
+        String value = SystemProperties.get("ro.hardware","rk30board");
+        if (value.equals("rk30board")
+                || value.equals("rk2928board")
+                || value.equals("rk29board")) {
+            mHardwareUsePerformanceTool = true;
+            mDevicePerformanceTool = DevicePerformanceTool.getInstance();
+        }
+
         mFgBroadcastQueue = new BroadcastQueue(this, "foreground", BROADCAST_FG_TIMEOUT, false);
         mBgBroadcastQueue = new BroadcastQueue(this, "background", BROADCAST_BG_TIMEOUT, true);
         mBroadcastQueues[0] = mFgBroadcastQueue;
@@ -2149,7 +2160,8 @@ public final class ActivityManagerService extends ActivityManagerNative
                                 totalUTime += otherUTime;
                                 totalSTime += otherSTime;
                                 if (pr != null) {
-                                    BatteryStatsImpl.Uid.Proc ps = pr.batteryStats;
+                                    BatteryStatsImpl.Uid.Proc ps = bstats.getProcessStatsLocked(
+                                            st.name, st.pid);
                                     ps.addCpuTimeLocked(st.rel_utime-otherUTime,
                                             st.rel_stime-otherSTime);
                                     ps.addSpeedStepTimes(cpuSpeedTimes);
@@ -2769,10 +2781,10 @@ public final class ActivityManagerService extends ActivityManagerNative
                     app.processName, uid, uid, gids, debugFlags, mountExternal,
                     app.info.targetSdkVersion, app.info.seinfo, null);
 
-            BatteryStatsImpl bs = app.batteryStats.getBatteryStats();
+            BatteryStatsImpl bs = mBatteryStatsService.getActiveStatistics();
             synchronized (bs) {
                 if (bs.isOnBattery()) {
-                    app.batteryStats.incStartsLocked();
+                    bs.getProcessStatsLocked(app.uid, app.processName).incStartsLocked();
                 }
             }
 
@@ -2964,6 +2976,31 @@ public final class ActivityManagerService extends ActivityManagerNative
         }
     }
 
+    public int getFrontActivityHardwareAccModeLocked(boolean systemAppLimited) {
+        int mode = PackageManager.HARDWARE_ACC_MODE_UNKNOWN;
+		final ActivityStack mainStack = mStackSupervisor.getFocusedStack();
+        ActivityRecord r = mainStack.topRunningActivityLocked(null);
+
+        if (r != null) {
+            try {
+                mode = AppGlobals.getPackageManager().getPackageHardwareAccMode(r.realActivity.toString());
+            } catch (RemoteException e) {
+            }
+        }
+        /*
+        if (systemAppLimited && mode == PackageManager.HARDWARE_ACC_MODE_UNKNOWN &&
+                ((r.info.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0)) {
+            return PackageManager.HARDWARE_ACC_MODE_NORMAL;
+        }
+        */
+        mode &= ~PackageManager.HARDWARE_ACC_FLAG_ASSIGNED;
+        return mode;
+    }
+
+    public void forceHardwareAccMode(int mode) {
+		final ActivityStack mainStack = mStackSupervisor.getFocusedStack();
+        mainStack.forceHardwareAccMode(mode);
+    }
     CompatibilityInfo compatibilityInfoForPackageLocked(ApplicationInfo ai) {
         return mCompatModePackages.compatibilityInfoForPackageLocked(ai);
     }
@@ -3737,6 +3774,11 @@ public final class ActivityManagerService extends ActivityManagerNative
                 Slog.i(TAG, "Process " + app.processName + " (pid " + pid
                         + ") has died.");
                 mAllowLowerMemLevel = true;
+				if("android.process.media".equals(app.processName))//add by xzj to prevent database stale when android.process.media been killed
+				{
+					SystemProperties.set("service.media_oncekilled", "true");
+					Slog.i(TAG, "---oopos android.process.media has been killed,set property service.media_oncekilled to indicated mediaprovider---");
+				}
             } else {
                 // Note that we always want to do oom adj to update our state with the
                 // new number of procs.
@@ -4612,6 +4654,12 @@ public final class ActivityManagerService extends ActivityManagerNative
 
         if (doit) {
             if (name != null) {
+                //add filter for xts or cts test to set mode when the test start
+                if(reason.contains("update pkg")&&(name.contains("com.android.cts")||name.contains("com.google.android.xts"))){
+                	 if (mHardwareUsePerformanceTool) {
+                			mDevicePerformanceTool.setPerformanceMode(6);
+                	}
+                }
                 Slog.i(TAG, "Force stopping " + name + " appid=" + appId
                         + " user=" + userId + ": " + reason);
             } else {
@@ -8150,10 +8198,7 @@ public final class ActivityManagerService extends ActivityManagerNative
                 }
             }
         }
-        synchronized (stats) {
-            ps = stats.getProcessStatsLocked(info.uid, proc);
-        }
-        return new ProcessRecord(ps, info, proc, uid);
+        return new ProcessRecord(stats, info, proc, uid);
     }
 
     final ProcessRecord addAppLocked(ApplicationInfo info, boolean isolated) {
@@ -11901,6 +11946,7 @@ public final class ActivityManagerService extends ActivityManagerNative
         boolean dumpDalvik = false;
         boolean oomOnly = false;
         boolean isCompact = false;
+        boolean localOnly = false;
         
         int opti = 0;
         while (opti < args.length) {
@@ -11919,12 +11965,15 @@ public final class ActivityManagerService extends ActivityManagerNative
                 isCompact = true;
             } else if ("--oom".equals(opt)) {
                 oomOnly = true;
+            } else if ("--local".equals(opt)) {
+                localOnly = true;
             } else if ("-h".equals(opt)) {
                 pw.println("meminfo dump options: [-a] [-d] [-c] [--oom] [process]");
                 pw.println("  -a: include all available information for each process.");
                 pw.println("  -d: include dalvik details when dumping process details.");
                 pw.println("  -c: dump in a compact machine-parseable representation.");
                 pw.println("  --oom: only show processes organized by oom adj.");
+                pw.println("  --local: only collect details locally, don't call process.");
                 pw.println("If [process] is specified it can be the name or ");
                 pw.println("pid of a specific process to dump.");
                 return;
@@ -12041,14 +12090,22 @@ public final class ActivityManagerService extends ActivityManagerNative
                     mi.dalvikPrivateDirty = (int)tmpLong[0];
                 }
                 if (dumpDetails) {
-                    try {
-                        pw.flush();
-                        thread.dumpMemInfo(fd, mi, isCheckinRequest, dumpFullDetails,
-                                dumpDalvik, innerArgs);
-                    } catch (RemoteException e) {
-                        if (!isCheckinRequest) {
-                            pw.println("Got RemoteException!");
+                    if (localOnly) {
+                        ActivityThread.dumpMemInfoTable(pw, mi, isCheckinRequest, dumpFullDetails,
+                                dumpDalvik, pid, r.processName, 0, 0, 0, 0, 0, 0);
+                        if (isCheckinRequest) {
+                            pw.println();
+                        }
+                    } else {
+                        try {
                             pw.flush();
+                            thread.dumpMemInfo(fd, mi, isCheckinRequest, dumpFullDetails,
+                                    dumpDalvik, innerArgs);
+                        } catch (RemoteException e) {
+                            if (!isCheckinRequest) {
+                                pw.println("Got RemoteException!");
+                                pw.flush();
+                            }
                         }
                     }
                 }
@@ -12668,7 +12725,8 @@ public final class ActivityManagerService extends ActivityManagerNative
                                 android.Manifest.permission.INTERACT_ACROSS_USERS_FULL,
                                 callingPid, callingUid, -1, true)
                                 != PackageManager.PERMISSION_GRANTED) {
-                    if (userId == UserHandle.USER_CURRENT_OR_SELF) {
+					if (userId == UserHandle.USER_CURRENT
+							|| userId == UserHandle.USER_CURRENT_OR_SELF) {
                         // In this case, they would like to just execute as their
                         // owner user instead of failing.
                         userId = callingUserId;
@@ -16173,8 +16231,8 @@ public final class ActivityManagerService extends ActivityManagerNative
                         null, null, 0, null, null, null, AppOpsManager.OP_NONE,
                         false, false, MY_PID, Process.SYSTEM_UID, newUserId);
                 intent = new Intent(Intent.ACTION_USER_SWITCHED);
-                intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY
-                        | Intent.FLAG_RECEIVER_FOREGROUND);
+                //intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY
+                //        | Intent.FLAG_RECEIVER_FOREGROUND);
                 intent.putExtra(Intent.EXTRA_USER_HANDLE, newUserId);
                 broadcastIntentLocked(null, null, intent,
                         null, null, 0, null, null,

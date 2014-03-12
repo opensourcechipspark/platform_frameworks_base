@@ -28,7 +28,7 @@ import android.text.style.CharacterStyle;
 import android.text.style.RelativeSizeSpan;
 import android.util.AttributeSet;
 import android.widget.TextView;
-
+import android.os.UserHandle;
 import com.android.systemui.DemoMode;
 
 import java.text.SimpleDateFormat;
@@ -80,7 +80,9 @@ public class Clock extends TextView implements DemoMode {
             filter.addAction(Intent.ACTION_CONFIGURATION_CHANGED);
             filter.addAction(Intent.ACTION_USER_SWITCHED);
 
-            getContext().registerReceiver(mIntentReceiver, filter, null, getHandler());
+        //    getContext().registerReceiver(mIntentReceiver, filter, null, getHandler());
+
+		    getContext().registerReceiverAsUser(mIntentReceiver,UserHandle.ALL, filter, null, getHandler());
         }
 
         // NOTE: It's safe to do these after registering the receiver since the receiver always runs

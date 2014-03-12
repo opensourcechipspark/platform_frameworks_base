@@ -491,6 +491,12 @@ public class Build {
             SystemProperties.getInt("ro.debuggable", 0) == 1;
 
     /**
+     * @hide
+     */
+    public static final boolean USE_LCDC_COMPOSER =
+            SystemProperties.getInt("ro.sf.lcdc_composer", 0) == 1;
+
+    /**
      * Returns the version string for the radio firmware.  May return
      * null (if, for instance, the radio is not currently on).
      */

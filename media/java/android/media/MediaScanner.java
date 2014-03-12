@@ -115,6 +115,7 @@ public class MediaScanner
     }
 
     private final static String TAG = "MediaScanner";
+    private final static boolean DEBUG_MEDIASCANNER = false;
 
     private static final String[] FILES_PRESCAN_PROJECTION = new String[] {
             Files.FileColumns._ID, // 0
@@ -319,7 +320,7 @@ public class MediaScanner
     private final boolean mExternalIsEmulated;
 
     /** whether to use bulk inserts or individual inserts for each item */
-    private static final boolean ENABLE_BULK_INSERTS = true;
+    private static final boolean ENABLE_BULK_INSERTS = false;
 
     // used when scanning the image database so we know whether we have to prune
     // old thumbnail files
@@ -481,6 +482,8 @@ public class MediaScanner
                 if (wasModified) {
                     entry.mLastModified = lastModified;
                 } else {
+                    if (DEBUG_MEDIASCANNER)
+                        Log.d(TAG,"------------make new entry for path ="+ path);
                     entry = new FileEntry(0, path, lastModified,
                             (isDirectory ? MtpConstants.FORMAT_ASSOCIATION : 0));
                 }
@@ -1071,12 +1074,14 @@ public class MediaScanner
         if (filePath != null) {
             // query for only one file
             where = MediaStore.Files.FileColumns._ID + ">?" +
-                " AND " + Files.FileColumns.DATA + "=?";
-            selectionArgs = new String[] { "", filePath };
+                " AND " + Files.FileColumns.DATA + " like '"+filePath+"%' ";
+            selectionArgs = new String[] { "" };
         } else {
             where = MediaStore.Files.FileColumns._ID + ">?";
             selectionArgs = new String[] { "" };
         }
+        if (DEBUG_MEDIASCANNER)
+            Log.d(TAG,"-----------enter prescan,filePath = "+filePath+"where = "+where);
 
         // Tell the provider to not delete the file.
         // If the file is truly gone the delete is unnecessary, and we want to avoid
@@ -1304,7 +1309,11 @@ public class MediaScanner
         try {
             long start = System.currentTimeMillis();
             initialize(volumeName);
-            prescan(null, true);
+            for (int i = 0; i < directories.length; i++) {
+                //Log.d(TAG,"------prescan,len = "+directories.length+" directories= "+directories[i]);
+                prescan(directories[i], true);
+            }
+            //prescan(null, true);
             long prescan = System.currentTimeMillis();
 
             if (ENABLE_BULK_INSERTS) {
@@ -1490,7 +1499,7 @@ public class MediaScanner
             selectionArgs = new String[] { path };
             c = mMediaProvider.query(mPackageName, mFilesUriNoNotify, FILES_PRESCAN_PROJECTION,
                     where, selectionArgs, null, null);
-            if (c.moveToFirst()) {
+            if (c != null && c.moveToFirst()) {
                 long rowId = c.getLong(FILES_PRESCAN_ID_COLUMN_INDEX);
                 int format = c.getInt(FILES_PRESCAN_FORMAT_COLUMN_INDEX);
                 long lastModified = c.getLong(FILES_PRESCAN_DATE_MODIFIED_COLUMN_INDEX);

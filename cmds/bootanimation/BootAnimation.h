@@ -39,11 +39,12 @@ class SurfaceControl;
 class BootAnimation : public Thread, public IBinder::DeathRecipient
 {
 public:
-                BootAnimation();
+                BootAnimation(bool shutdown);
     virtual     ~BootAnimation();
 
     sp<SurfaceComposerClient> session() const;
-
+    bool        mShutdown;
+    void        isShutdown(bool shutdown);
 private:
     virtual bool        threadLoop();
     virtual status_t    readyToRun();
@@ -82,8 +83,9 @@ private:
     status_t initTexture(void* buffer, size_t len);
     bool android();
     bool movie();
-
+    void getTexCoordinate();
     void checkExit();
+    void playMusic();
 
     sp<SurfaceComposerClient>       mSession;
     AssetManager mAssets;
@@ -97,6 +99,21 @@ private:
     sp<Surface> mFlingerSurface;
     bool        mAndroidAnimation;
     ZipFileRO   mZip;
+    int         mHardwareRotation;
+    GLfloat     mTexCoords[8];
+    bool        mReverseAxis;
+    int         mTexWidth;
+    int         mTexHeight;
+    int         mBMPWidth;
+    int         mBMPHeight;
+
+    template<class T>
+    void exchangeParameters(T* x, T* y) {
+        T temp;
+        temp = *x;
+        *x = *y;
+        *y = temp;
+    }
 };
 
 // ---------------------------------------------------------------------------

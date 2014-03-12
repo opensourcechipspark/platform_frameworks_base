@@ -80,6 +80,16 @@ public final class BridgeWindowSession implements IWindowSession {
         return false;
     }
 
+	@Override
+    public void hideWindowLayer(IWindow window, boolean visible) throws RemoteException {
+		// pass for now.
+    }
+
+	@Override
+  	public void updatePositionAndSize(IWindow window,int x,int y,int widht,int height) throws RemoteException{
+		//pass for now.
+    }
+
     @Override
     public boolean performHapticFeedback(IWindow window, int effectId, boolean always) {
         // pass for now.

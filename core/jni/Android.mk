@@ -71,7 +71,6 @@ LOCAL_SRC_FILES:= \
 	android_net_LocalSocketImpl.cpp \
 	android_net_NetUtils.cpp \
 	android_net_TrafficStats.cpp \
-	android_net_wifi_WifiNative.cpp \
 	android_nio_utils.cpp \
 	android_text_format_Time.cpp \
 	android_util_AssetManager.cpp \
@@ -148,6 +147,13 @@ LOCAL_SRC_FILES:= \
 	android_content_res_Configuration.cpp \
 	android_animation_PropertyValuesHolder.cpp \
 	com_android_internal_net_NetworkStatsFactory.cpp
+
+#add a new branch for android 4.2's way(gwl)
+ifeq ($(strip $(FORCE_WIFI_WORK_AS_ANDROID4_2)), true)
+LOCAL_SRC_FILES += android_net_wifi_WifiNative_old.cpp
+else
+LOCAL_SRC_FILES += android_net_wifi_WifiNative.cpp
+endif
 
 LOCAL_C_INCLUDES += \
 	$(JNI_H_INCLUDE) \

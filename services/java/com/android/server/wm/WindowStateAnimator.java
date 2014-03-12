@@ -146,6 +146,7 @@ class WindowStateAnimator {
 
     /** Was this window last hidden? */
     boolean mLastHidden;
+	boolean mSurfaceHidden;
 
     int mAttrFlags;
     int mAttrType;
@@ -418,6 +419,10 @@ class WindowStateAnimator {
     }
 
     void hide() {
+		if(mSurfaceHidden){
+	 		//surface already hide 
+	   		return;
+		}
         if (!mLastHidden) {
             //dump();
             mLastHidden = true;

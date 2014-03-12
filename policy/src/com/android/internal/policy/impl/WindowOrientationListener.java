@@ -293,7 +293,7 @@ public abstract class WindowOrientationListener {
         // large or we can lose responsiveness.  Likewise we don't want to make it too
         // small or we do a poor job suppressing acceleration spikes.
         // Empirically, 100ms seems to be too small and 500ms is too large.
-        private static final float FILTER_TIME_CONSTANT_MS = 200.0f;
+        private static final float FILTER_TIME_CONSTANT_MS = 100.0f;
 
         /* State for orientation detection. */
 
@@ -630,7 +630,7 @@ public abstract class WindowOrientationListener {
          * proposed rotation.
          */
         private boolean isPredictedRotationAcceptableLocked(long now) {
-            // The predicted rotation must have settled long enough.
+            /*// The predicted rotation must have settled long enough.
             if (now < mPredictedRotationTimestampNanos + PROPOSAL_SETTLE_TIME_NANOS) {
                 return false;
             }
@@ -650,7 +650,7 @@ public abstract class WindowOrientationListener {
             if (now < mAccelerationTimestampNanos
                     + PROPOSAL_MIN_TIME_SINCE_ACCELERATION_ENDED_NANOS) {
                 return false;
-            }
+            }*/
 
             // Looks good!
             return true;

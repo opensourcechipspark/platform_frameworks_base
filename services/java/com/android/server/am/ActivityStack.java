@@ -36,7 +36,6 @@ import static com.android.server.am.ActivityStackSupervisor.DEBUG_SAVED_STATE;
 import static com.android.server.am.ActivityStackSupervisor.DEBUG_STATES;
 import static com.android.server.am.ActivityStackSupervisor.HOME_STACK_ID;
 
-import android.os.Trace;
 import com.android.internal.os.BatteryStatsImpl;
 import com.android.internal.util.Objects;
 import com.android.server.Watchdog;
@@ -64,13 +63,16 @@ import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Bundle;
+import android.os.Debug;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
 import android.os.RemoteException;
 import android.os.SystemClock;
+import android.os.Trace;
 import android.os.UserHandle;
+import android.os.SystemProperties;
 import android.util.EventLog;
 import android.util.Slog;
 import android.view.Display;
@@ -207,6 +209,12 @@ final class ActivityStack {
             new ArrayList<ActivityRecord>();
 
     /**
+     *
+     */
+    DevicePerformanceTool mDevicePerformanceTool;
+
+    boolean mHardwareUsePerformanceTool = false;
+    /**
      * Set when we know we are going to be calling updateConfiguration()
      * soon, so want to skip intermediate config checks.
      */
@@ -334,6 +342,9 @@ final class ActivityStack {
         mContext = context;
         mStackId = stackId;
         mCurrentUser = service.mCurrentUserId;
+
+        mHardwareUsePerformanceTool = mService.mHardwareUsePerformanceTool;
+        mDevicePerformanceTool = DevicePerformanceTool.getInstance();
     }
 
     boolean okToShow(ActivityRecord r) {
@@ -565,7 +576,7 @@ final class ActivityStack {
 
         // Move userId's tasks to the top.
         int index = mTaskHistory.size();
-        for (int i = 0; i < index; ++i) {
+        for (int i = 0; i < index; ) {
             TaskRecord task = mTaskHistory.get(i);
             if (task.userId == userId) {
                 if (DEBUG_TASKS) Slog.d(TAG, "switchUserLocked: stack=" + getStackId() +
@@ -573,6 +584,9 @@ final class ActivityStack {
                 mTaskHistory.remove(i);
                 mTaskHistory.add(task);
                 --index;
+                // Use same value for i.
+            } else {
+                ++i;
             }
         }
         if (VALIDATE_TOKENS) {
@@ -996,8 +1010,8 @@ final class ActivityStack {
                 if (r.isHomeActivity()) {
                     return true;
                 }
-                if (!r.finishing && r.visible && r.fullscreen) {
-                    // Passed activity is over a visible fullscreen activity.
+                if (!r.finishing && r.fullscreen) {
+                    // Passed activity is over a fullscreen activity.
                     return false;
                 }
             }
@@ -1140,7 +1154,7 @@ final class ActivityStack {
                     } else if (isActivityOverHome(r)) {
                         if (DEBUG_VISBILITY) Slog.v(TAG, "Showing home: at " + r);
                         showHomeBehindStack = true;
-                        behindFullscreen = true;
+                        behindFullscreen = !isHomeStack();
                     }
                 } else {
                     if (DEBUG_VISBILITY) Slog.v(
@@ -1340,6 +1354,8 @@ final class ActivityStack {
         next.updateOptionsLocked(options);
 
         if (DEBUG_SWITCH) Slog.v(TAG, "Resuming " + next);
+
+        checkApplicationHardwareAccMode();
 
         // If we are currently pausing an activity, then don't do anything
         // until that is done.
@@ -1713,7 +1729,7 @@ final class ActivityStack {
                         mWindowManager.addAppToken(task.mActivities.indexOf(r), r.appToken,
                                 r.task.taskId, mStackId, r.info.screenOrientation, r.fullscreen,
                                 (r.info.flags & ActivityInfo.FLAG_SHOW_ON_LOCK_SCREEN) != 0,
-                                r.userId);
+                                r.userId, r.info.configChanges);
                         if (VALIDATE_TOKENS) {
                             validateAppTokensLocked();
                         }
@@ -1774,7 +1790,8 @@ final class ActivityStack {
             r.updateOptionsLocked(options);
             mWindowManager.addAppToken(task.mActivities.indexOf(r),
                     r.appToken, r.task.taskId, mStackId, r.info.screenOrientation, r.fullscreen,
-                    (r.info.flags & ActivityInfo.FLAG_SHOW_ON_LOCK_SCREEN) != 0, r.userId);
+                    (r.info.flags & ActivityInfo.FLAG_SHOW_ON_LOCK_SCREEN) != 0, r.userId,
+                    r.info.configChanges);
             boolean doShow = true;
             if (newTask) {
                 // Even though this activity is starting fresh, we still need
@@ -1817,7 +1834,8 @@ final class ActivityStack {
             // because there is nothing for it to animate on top of.
             mWindowManager.addAppToken(task.mActivities.indexOf(r), r.appToken,
                     r.task.taskId, mStackId, r.info.screenOrientation, r.fullscreen,
-                    (r.info.flags & ActivityInfo.FLAG_SHOW_ON_LOCK_SCREEN) != 0, r.userId);
+                    (r.info.flags & ActivityInfo.FLAG_SHOW_ON_LOCK_SCREEN) != 0, r.userId,
+                    r.info.configChanges);
             ActivityOptions.abort(options);
         }
         if (VALIDATE_TOKENS) {
@@ -1907,26 +1925,38 @@ final class ActivityStack {
                 // bottom of the activity stack.  This also keeps it
                 // correctly ordered with any activities we previously
                 // moved.
+                final ThumbnailHolder newThumbHolder;
+                final TaskRecord targetTask;
                 final ActivityRecord bottom =
                         !mTaskHistory.isEmpty() && !mTaskHistory.get(0).mActivities.isEmpty() ?
-                        mTaskHistory.get(0).mActivities.get(0) : null;
+                                mTaskHistory.get(0).mActivities.get(0) : null;
                 if (bottom != null && target.taskAffinity != null
                         && target.taskAffinity.equals(bottom.task.affinity)) {
                     // If the activity currently at the bottom has the
                     // same task affinity as the one we are moving,
                     // then merge it into the same task.
-                    target.setTask(bottom.task, bottom.thumbHolder, false);
+                    targetTask = bottom.task;
+                    newThumbHolder = bottom.thumbHolder == null ? targetTask : bottom.thumbHolder;
                     if (DEBUG_TASKS) Slog.v(TAG, "Start pushing activity " + target
                             + " out to bottom task " + bottom.task);
                 } else {
-                    target.setTask(createTaskRecord(mStackSupervisor.getNextTaskId(), target.info,
-                            null, false), null, false);
-                    target.task.affinityIntent = target.intent;
+                    targetTask = createTaskRecord(mStackSupervisor.getNextTaskId(), target.info,
+                            null, false);
+                    newThumbHolder = targetTask;
+                    targetTask.affinityIntent = target.intent;
                     if (DEBUG_TASKS) Slog.v(TAG, "Start pushing activity " + target
                             + " out to new task " + target.task);
                 }
 
-                final TaskRecord targetTask = target.task;
+                if (clearWhenTaskReset) {
+                    // This is the start of a new sub-task.
+                    if (target.thumbHolder == null) {
+                        target.thumbHolder = new ThumbnailHolder();
+                    }
+                } else {
+                    target.thumbHolder = newThumbHolder;
+                }
+
                 final int targetTaskId = targetTask.taskId;
                 mWindowManager.setAppGroupId(target.appToken, targetTaskId);
 
@@ -1947,8 +1977,8 @@ final class ActivityStack {
                         }
                     }
                     if (DEBUG_ADD_REMOVE) Slog.i(TAG, "Removing activity " + p + " from task="
-                            + task + " adding to task=" + targetTask,
-                            new RuntimeException("here").fillInStackTrace());
+                            + task + " adding to task=" + targetTask
+                            + " Callers=" + Debug.getCallers(4));
                     if (DEBUG_TASKS) Slog.v(TAG, "Pushing next activity " + p
                             + " out to target's task " + target.task);
                     p.setTask(targetTask, curThumbHolder, false);
@@ -3142,7 +3172,9 @@ final class ActivityStack {
 
         final TaskRecord task = mResumedActivity != null ? mResumedActivity.task : null;
         if (task == tr && task.mOnTopOfHome || numTasks <= 1) {
-            task.mOnTopOfHome = false;
+            if (task != null) {
+                task.mOnTopOfHome = false;
+            }
             return mStackSupervisor.resumeHomeActivity(null);
         }
 
@@ -3617,5 +3649,18 @@ final class ActivityStack {
     public String toString() {
         return "ActivityStack{" + Integer.toHexString(System.identityHashCode(this))
                 + " stackId=" + mStackId + ", " + mTaskHistory.size() + " tasks}";
+    }
+
+    private void checkApplicationHardwareAccMode() {
+        if (mHardwareUsePerformanceTool) {
+            int mode = mService.getFrontActivityHardwareAccModeLocked(false);
+            mDevicePerformanceTool.setPerformanceMode(mode);
+        }
+
+    }
+    public void forceHardwareAccMode(int mode) {
+        if (mHardwareUsePerformanceTool) {
+            mDevicePerformanceTool.setPerformanceMode(mode);
+        }
     }
 }

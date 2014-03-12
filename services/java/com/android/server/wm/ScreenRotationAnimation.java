@@ -521,6 +521,10 @@ class ScreenRotationAnimation {
         mRotateExitAnimation.scaleCurrentDuration(animationScale);
         mRotateEnterAnimation.restrictDuration(maxAnimationDuration);
         mRotateEnterAnimation.scaleCurrentDuration(animationScale);
+
+	//add by xzj: do some hack to improve screen rotation perfomance
+        mRotateExitAnimation.setDuration(mRotateExitAnimation.getDuration()*4/5);
+        mRotateEnterAnimation.setDuration(mRotateEnterAnimation.getDuration()*4/5);
         if (USE_CUSTOM_BLACK_FRAME) {
             mRotateFrameAnimation.restrictDuration(maxAnimationDuration);
             mRotateFrameAnimation.scaleCurrentDuration(animationScale);

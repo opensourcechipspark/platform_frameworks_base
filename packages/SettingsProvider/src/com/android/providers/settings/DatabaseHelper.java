@@ -1977,7 +1977,21 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
             // Set default hearing aid
             loadSetting(stmt, Settings.System.HEARING_AID, 0);
+            // Set for HDMI
+			loadIntegerSetting(stmt,Settings.System.HDMI_LCD_TIMEOUT,
+			             R.integer.def_hdmi_lcd_timeout);
+            loadBooleanSetting(stmt, Settings.System.SCREENSHOT_BUTTON_SHOW,
+                    R.bool.def_screenshot_button_show);
 
+					String enableUms= SystemProperties.get("ro.factory.hasUMS","false");
+					if("true".equals(enableUms))//if has UMS function,flash is primary storage
+					{
+						loadSetting(stmt,Settings.System.SCREENSHOT_LOCATION,"/mnt/internal_sd");
+					}
+					else
+					{
+	                	loadSetting(stmt,Settings.System.SCREENSHOT_LOCATION,"/storage/emulated");
+					}
             // Set default tty mode
             loadSetting(stmt, Settings.System.TTY_MODE, 0);
 
@@ -2036,8 +2050,17 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             stmt = db.compileStatement("INSERT OR IGNORE INTO secure(name,value)"
                     + " VALUES(?,?);");
 
-            loadStringSetting(stmt, Settings.Secure.LOCATION_PROVIDERS_ALLOWED,
+	    String hasGPS = SystemProperties.get("ro.factory.hasGPS");
+	    if("true".equals(hasGPS))
+	    {
+            	loadStringSetting(stmt, Settings.Secure.LOCATION_PROVIDERS_ALLOWED,
                     R.string.def_location_providers_allowed);
+	    }
+	    else
+	    {
+                loadStringSetting(stmt, Settings.Secure.LOCATION_PROVIDERS_ALLOWED,
+                    R.string.def_location_providers_allowed_network);
+	    }
 
             String wifiWatchList = SystemProperties.get("ro.com.android.wifi-watchlist");
             if (!TextUtils.isEmpty(wifiWatchList)) {
@@ -2071,8 +2094,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
             loadStringSetting(stmt, Settings.Secure.ACCESSIBILITY_WEB_CONTENT_KEY_BINDINGS,
                     R.string.def_accessibility_web_content_key_bindings);
-
-            loadIntegerSetting(stmt, Settings.Secure.LONG_PRESS_TIMEOUT,
+		    loadIntegerSetting(stmt, Settings.Secure.LONG_PRESS_TIMEOUT,
                     R.integer.def_long_press_timeout_millis);
 
             loadBooleanSetting(stmt, Settings.Secure.TOUCH_EXPLORATION_ENABLED,
@@ -2244,9 +2266,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                     R.string.def_car_undock_sound);
             loadStringSetting(stmt, Settings.Global.WIRELESS_CHARGING_STARTED_SOUND,
                     R.string.def_wireless_charging_started_sound);
-
             loadIntegerSetting(stmt, Settings.Global.DOCK_AUDIO_MEDIA_ENABLED,
                     R.integer.def_dock_audio_media_enabled);
+
+            loadStringSetting(stmt, Settings.Global.SPDIF_OUTPUT_ENABLED,
+                    R.integer.def_spdif_output_enabled);
 
             loadSetting(stmt, Settings.Global.SET_INSTALL_LOCATION, 0);
             loadSetting(stmt, Settings.Global.DEFAULT_INSTALL_LOCATION,

@@ -52,8 +52,14 @@ int main(int argc, char** argv)
         ProcessState::self()->startThreadPool();
 
         // create the boot animation object
-        sp<BootAnimation> boot = new BootAnimation();
-
+	sp<BootAnimation> boot ;
+        if (argc > 1) {
+            if (strcmp(argv[1], "-shutdown") == 0) {
+		     boot = new BootAnimation(true);
+            }
+        }else {
+		boot = new BootAnimation(false);
+	}
         IPCThreadState::self()->joinThreadPool();
 
     }

@@ -988,6 +988,7 @@ public abstract class HardwareRenderer {
 
         @Override
         void dumpGfxInfo(PrintWriter pw) {
+            pw.printf("\n\tDirty Regions: %s\n", hasDirtyRegions() ? "Enable":"Disabled");
             if (mProfileEnabled) {
                 pw.printf("\n\tDraw\tProcess\tExecute\n");
 

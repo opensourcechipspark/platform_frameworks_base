@@ -560,6 +560,12 @@ public class UserManager {
     public static int getMaxSupportedUsers() {
         // Don't allow multiple users on certain builds
         if (android.os.Build.ID.startsWith("JVP")) return 1;
+		String enableUms= SystemProperties.get("ro.factory.hasUMS","false");
+		if("true".equals(enableUms))
+		{
+			Log.d(TAG,"---getMaxSupportedUsers,we has UMS,force disabled M-user---");
+			return 1;
+		}
         return SystemProperties.getInt("fw.max_users",
                 Resources.getSystem().getInteger(R.integer.config_multiuserMaximumUsers));
     }

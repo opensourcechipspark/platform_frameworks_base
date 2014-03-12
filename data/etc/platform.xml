@@ -141,4 +141,7 @@
     <library name="javax.obex"
             file="/system/framework/javax.obex.jar"/>
 
+    <feature name="android.software.app_widgets"/>
+    <feature name="android.software.device_admin"/>
+
 </permissions>

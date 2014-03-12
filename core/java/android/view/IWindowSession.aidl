@@ -132,6 +132,11 @@ interface IWindowSession {
     void finishDrawing(IWindow window);
     
     void setInTouchMode(boolean showFocus);
+
+    void hideWindowLayer(IWindow window, boolean visible);
+
+    void updatePositionAndSize(IWindow window,int x,int y,int widht,int height);
+
     boolean getInTouchMode();
     
     boolean performHapticFeedback(IWindow window, int effectId, boolean always);

@@ -35,6 +35,7 @@ import android.os.Bundle;
 import android.provider.Settings;
 import android.util.AttributeSet;
 import android.view.View;
+import android.os.SystemProperties;
 
 public class BatteryMeterView extends View implements DemoMode {
     public static final String TAG = BatteryMeterView.class.getSimpleName();
@@ -66,7 +67,9 @@ public class BatteryMeterView extends View implements DemoMode {
     private final RectF mFrame = new RectF();
     private final RectF mButtonFrame = new RectF();
     private final RectF mClipFrame = new RectF();
-    private final Rect mBoltFrame = new Rect();
+    private final RectF mBoltFrame = new RectF();
+
+    private final boolean hasNoBattery = "true".equals(SystemProperties.get("ro.factory.without_battery", "false"));
 
     private class BatteryTracker extends BroadcastReceiver {
         public static final int UNKNOWN_LEVEL = -1;
@@ -85,6 +88,7 @@ public class BatteryMeterView extends View implements DemoMode {
 
         @Override
         public void onReceive(Context context, Intent intent) {
+            if(hasNoBattery) return;
             final String action = intent.getAction();
             if (action.equals(Intent.ACTION_BATTERY_CHANGED)) {
                 if (testmode && ! intent.getBooleanExtra("testmode", false)) return;
@@ -146,7 +150,7 @@ public class BatteryMeterView extends View implements DemoMode {
     @Override
     public void onAttachedToWindow() {
         super.onAttachedToWindow();
-
+        if(hasNoBattery) return;
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_BATTERY_CHANGED);
         filter.addAction(ACTION_LEVEL_TEST);
@@ -160,7 +164,7 @@ public class BatteryMeterView extends View implements DemoMode {
     @Override
     public void onDetachedFromWindow() {
         super.onDetachedFromWindow();
-
+        if(hasNoBattery) return;
         getContext().unregisterReceiver(mTracker);
     }
 
@@ -174,7 +178,6 @@ public class BatteryMeterView extends View implements DemoMode {
 
     public BatteryMeterView(Context context, AttributeSet attrs, int defStyle) {
         super(context, attrs, defStyle);
-
         final Resources res = context.getResources();
         TypedArray levels = res.obtainTypedArray(R.array.batterymeter_color_levels);
         TypedArray colors = res.obtainTypedArray(R.array.batterymeter_color_values);
@@ -242,6 +245,7 @@ public class BatteryMeterView extends View implements DemoMode {
 
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        if(hasNoBattery) return;
         mHeight = h;
         mWidth = w;
         mWarningTextPaint.setTextSize(h * 0.75f);
@@ -260,6 +264,7 @@ public class BatteryMeterView extends View implements DemoMode {
 
     @Override
     public void draw(Canvas c) {
+        if(hasNoBattery) return;
         BatteryTracker tracker = mDemoMode ? mDemoTracker : mTracker;
         final int level = tracker.level;
 
@@ -319,10 +324,10 @@ public class BatteryMeterView extends View implements DemoMode {
 
         if (tracker.plugged) {
             // draw the bolt
-            final int bl = (int)(mFrame.left + mFrame.width() / 4.5f);
-            final int bt = (int)(mFrame.top + mFrame.height() / 6f);
-            final int br = (int)(mFrame.right - mFrame.width() / 7f);
-            final int bb = (int)(mFrame.bottom - mFrame.height() / 10f);
+            final float bl = mFrame.left + mFrame.width() / 4.5f;
+            final float bt = mFrame.top + mFrame.height() / 6f;
+            final float br = mFrame.right - mFrame.width() / 7f;
+            final float bb = mFrame.bottom - mFrame.height() / 10f;
             if (mBoltFrame.left != bl || mBoltFrame.top != bt
                     || mBoltFrame.right != br || mBoltFrame.bottom != bb) {
                 mBoltFrame.set(bl, bt, br, bb);
@@ -365,6 +370,7 @@ public class BatteryMeterView extends View implements DemoMode {
 
     @Override
     public void dispatchDemoCommand(String command, Bundle args) {
+        if(hasNoBattery) return;
         if (!mDemoMode && command.equals(COMMAND_ENTER)) {
             mDemoMode = true;
             mDemoTracker.level = mTracker.level;

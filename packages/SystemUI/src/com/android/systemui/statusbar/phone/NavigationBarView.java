@@ -29,6 +29,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Resources;
+import android.content.res.Configuration;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
@@ -52,6 +53,7 @@ import com.android.systemui.R;
 import com.android.systemui.statusbar.BaseStatusBar;
 import com.android.systemui.statusbar.DelegateViewHelper;
 import com.android.systemui.statusbar.policy.DeadZone;
+import android.os.SystemProperties;
 import com.android.systemui.statusbar.policy.KeyButtonView;
 
 import java.io.FileDescriptor;
@@ -73,7 +75,7 @@ public class NavigationBarView extends LinearLayout {
     int mBarSize;
     boolean mVertical;
     boolean mScreenOn;
-
+    private String isEnableShowVoiceIcon = SystemProperties.get("ro.rk.systembar.voiceicon","false");
     boolean mShowMenu;
     int mDisabledFlags = 0;
     int mNavigationIconHints = 0;
@@ -280,6 +282,15 @@ public class NavigationBarView extends LinearLayout {
     public View getHomeButton() {
         return mCurrentView.findViewById(R.id.home);
     }
+    public View getScreenshotButton(){
+        return mCurrentView.findViewById(R.id.screenshot);
+    }
+	public View getSubButton(){
+        return mCurrentView.findViewById(R.id.sub);
+    }
+	public View getAddButton(){
+        return mCurrentView.findViewById(R.id.add);
+    }		
 
     // for when home is disabled, but search isn't
     public View getSearchLight() {
@@ -378,6 +389,17 @@ public class NavigationBarView extends LinearLayout {
         getBackButton()   .setVisibility(disableBack       ? View.INVISIBLE : View.VISIBLE);
         getHomeButton()   .setVisibility(disableHome       ? View.INVISIBLE : View.VISIBLE);
         getRecentsButton().setVisibility(disableRecent     ? View.INVISIBLE : View.VISIBLE);
+       //  getScreenshotButton().setVisibility(disableHome       ? View.INVISIBLE : View.VISIBLE);      
+        if ("true".equals(isEnableShowVoiceIcon)){
+                getSubButton().setVisibility(disableHome ? View.INVISIBLE : View.VISIBLE);
+                getAddButton().setVisibility(disableHome ? View.INVISIBLE : View.VISIBLE);
+				if((mContext.getResources().getConfiguration().orientation == Configuration.        ORIENTATION_PORTRAIT) && ((mContext.getResources().getConfiguration().screenHeightDp < 720) || (mContext.getResources().getConfiguration().screenWidthDp < 720))) {
+					getSubButton().setVisibility(View.GONE);
+					getAddButton().setVisibility(View.GONE);}
+        } else {
+                getSubButton().setVisibility(View.GONE);
+                getAddButton().setVisibility(View.GONE);
+        }
 
         final boolean showSearch = disableHome && !disableSearch;
         final boolean showCamera = showSearch && !mCameraDisabledByDpm;

@@ -49,6 +49,7 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.SystemProperties;
+import android.os.Build;
 import android.os.Trace;
 import android.util.AndroidRuntimeException;
 import android.util.DisplayMetrics;
@@ -204,6 +205,7 @@ public final class ViewRootImpl implements ViewParent,
     boolean mFirst;
     boolean mReportNextDraw;
     boolean mFullRedrawNeeded;
+    boolean mUpdateTranformHint;
     boolean mNewSurfaceNeeded;
     boolean mHasHadWindowFocus;
     boolean mLastWasImTarget;
@@ -259,6 +261,7 @@ public final class ViewRootImpl implements ViewParent,
 
     final Configuration mLastConfiguration = new Configuration();
     final Configuration mPendingConfiguration = new Configuration();
+    boolean mConfigurationChanged = false;
 
     boolean mScrollMayChange;
     int mSoftInputMode;
@@ -781,6 +784,7 @@ public final class ViewRootImpl implements ViewParent,
                                 & WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST);
             }
             mWindowAttributesChanged = true;
+            mUpdateTranformHint = true;
             scheduleTraversals();
         }
     }
@@ -1380,7 +1384,11 @@ public final class ViewRootImpl implements ViewParent,
         int relayoutResult = 0;
 
         if (mFirst || windowShouldResize || insetsChanged ||
-                viewVisibilityChanged || params != null) {
+                viewVisibilityChanged || params != null || mConfigurationChanged) {
+
+            if(Build.USE_LCDC_COMPOSER && mConfigurationChanged) {
+                mConfigurationChanged = false;
+            }
 
             if (viewVisibility == View.VISIBLE) {
                 // If this window is giving internal insets to the window
@@ -2247,10 +2255,13 @@ public final class ViewRootImpl implements ViewParent,
         final boolean fullRedrawNeeded = mFullRedrawNeeded;
         mFullRedrawNeeded = false;
 
+        final boolean updateTranformHint = mUpdateTranformHint;
+        mUpdateTranformHint = false;
+
         mIsDrawing = true;
         Trace.traceBegin(Trace.TRACE_TAG_VIEW, "draw");
         try {
-            draw(fullRedrawNeeded);
+            draw(fullRedrawNeeded, updateTranformHint);
         } finally {
             mIsDrawing = false;
             Trace.traceEnd(Trace.TRACE_TAG_VIEW);
@@ -2281,7 +2292,7 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
-    private void draw(boolean fullRedrawNeeded) {
+    private void draw(boolean fullRedrawNeeded, boolean updateTranformHint) {
         Surface surface = mSurface;
         if (!surface.isValid()) {
             return;
@@ -2415,6 +2426,11 @@ public final class ViewRootImpl implements ViewParent,
         if (animating) {
             mFullRedrawNeeded = true;
             scheduleTraversals();
+        }
+
+        if (updateTranformHint) {
+           mFullRedrawNeeded = true;
+           scheduleTraversals();
         }
     }
 
@@ -2910,6 +2926,9 @@ public final class ViewRootImpl implements ViewParent,
                     mView.setLayoutDirection(currentLayoutDirection);
                 }
                 mView.dispatchConfigurationChanged(config);
+                if(Build.USE_LCDC_COMPOSER) {
+                    mConfigurationChanged = true;
+                }
             }
         }
 

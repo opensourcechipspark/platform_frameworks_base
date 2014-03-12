@@ -1162,7 +1162,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
      */
     private boolean waitForOnOff(boolean on, boolean off) {
         int i = 0;
-        while (i < 10) {
+        int counts = 100; // increase timeout time, modify by HuWeiguo
+        while (i < counts) {
             synchronized(mConnection) {
                 try {
                     if (mBluetooth == null) break;

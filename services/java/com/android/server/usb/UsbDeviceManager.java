@@ -89,6 +89,7 @@ public class UsbDeviceManager {
     private static final int MSG_SYSTEM_READY = 3;
     private static final int MSG_BOOT_COMPLETED = 4;
     private static final int MSG_USER_SWITCHED = 5;
+	private static final int MSG_UPDATE_STATE_RETRY = 6;
 
     private static final int AUDIO_MODE_NONE = 0;
     private static final int AUDIO_MODE_SOURCE = 1;
@@ -96,7 +97,8 @@ public class UsbDeviceManager {
     // Delay for debouncing USB disconnects.
     // We often get rapid connect/disconnect events when enabling USB functions,
     // which need debouncing.
-    private static final int UPDATE_DELAY = 1000;
+    private static final int UPDATE_DELAY = 50;//1000
+    private static final int UPDATE_RETRY_DELAY = 500;
 
     private static final String BOOT_MODE_PROPERTY = "ro.bootmode";
 
@@ -559,6 +561,14 @@ public class UsbDeviceManager {
                     intent.putExtra(functions[i], true);
                 }
             }
+			
+            boolean isMassStorage = containsFunction(mCurrentFunctions,
+                    UsbManager.USB_FUNCTION_MASS_STORAGE);
+            Slog.d(TAG, "Usb state is " + mConnected + " " + mConfigured + " " + isMassStorage);
+            if (mConnected && isMassStorage)
+                SystemProperties.set("sys.usb.umsavailible", "true");
+            else
+                SystemProperties.set("sys.usb.umsavailible", "false");
 
             mContext.sendStickyBroadcastAsUser(intent, UserHandle.ALL);
         }
@@ -609,6 +619,13 @@ public class UsbDeviceManager {
                         updateUsbState();
                         updateAudioSourceFunction();
                     }
+					else//add by xzj,when not BootComplete,send message to updateUsbState later
+					{
+						removeMessages(MSG_UPDATE_STATE_RETRY);
+						Message msg1 = Message.obtain(this, MSG_UPDATE_STATE_RETRY);
+			            sendMessageDelayed(msg1,UPDATE_RETRY_DELAY);
+						Slog.d(TAG,"-----MSG_UPDATE_STATE,but not BootComplete,send MSG_UPDATE_STATE_RETRY after 500ms---");
+					}
                     break;
                 case MSG_ENABLE_ADB:
                     setAdbEnabled(msg.arg1 == 1);
@@ -645,6 +662,20 @@ public class UsbDeviceManager {
                     mCurrentUser = msg.arg1;
                     break;
                 }
+				case MSG_UPDATE_STATE_RETRY://add by xzj to process updateUsbState when not BootComplete
+				{
+                    if (mBootCompleted) {
+                        updateUsbState();
+ 						Slog.d(TAG,"-----get MSG_UPDATE_STATE_RETRY,and BootComplete,do updateUsbState");
+                     }
+					else
+					{
+						Message msg2 = Message.obtain(this, MSG_UPDATE_STATE_RETRY);
+			            sendMessageDelayed(msg2,UPDATE_RETRY_DELAY);
+						Slog.d(TAG,"-----get MSG_UPDATE_STATE_RETRY,but not BootComplete,send MSG_UPDATE_STATE_RETRY after 500ms---");
+					}
+					break;
+				}
             }
         }
 
@@ -653,7 +684,7 @@ public class UsbDeviceManager {
         }
 
         private void updateUsbNotification() {
-            if (mNotificationManager == null || !mUseUsbNotification) return;
+            if (mNotificationManager == null/* || !mUseUsbNotification*/) return;//show notification in mtp mode
             int id = 0;
             Resources r = mContext.getResources();
             if (mConnected) {
@@ -663,7 +694,7 @@ public class UsbDeviceManager {
                     id = com.android.internal.R.string.usb_ptp_notification_title;
                 } else if (containsFunction(mCurrentFunctions,
                         UsbManager.USB_FUNCTION_MASS_STORAGE)) {
-                    id = com.android.internal.R.string.usb_cd_installer_notification_title;
+                    //id = com.android.internal.R.string.usb_cd_installer_notification_title;//do not show notification when UMS
                 } else if (containsFunction(mCurrentFunctions, UsbManager.USB_FUNCTION_ACCESSORY)) {
                     id = com.android.internal.R.string.usb_accessory_notification_title;
                 } else {

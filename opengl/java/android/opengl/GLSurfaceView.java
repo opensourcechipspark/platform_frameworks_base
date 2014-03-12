@@ -1540,10 +1540,16 @@ public class GLSurfaceView extends SurfaceView implements SurfaceHolder.Callback
                             // Log the error to help developers understand why rendering stopped.
                             EglHelper.logEglErrorAsWarning("GLThread", "eglSwapBuffers", swapError);
 
+                            /* FIXME: antutu issue.
+                                     if the frame isn't able to be processed fast enough,
+                               may cause gpu drop the task. Under this condition, surface
+                               is still there.*/
+                            /*
                             synchronized(sGLThreadManager) {
                                 mSurfaceIsBad = true;
                                 sGLThreadManager.notifyAll();
                             }
+                            */
                             break;
                     }
 

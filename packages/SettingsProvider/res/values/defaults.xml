@@ -17,6 +17,10 @@
  */
 -->
 <resources>
+    <!-- should show the screenshot button default -->
+    <bool name="def_screenshot_button_show">false</bool>
+    <!-- the store location of screen capture by default-->
+    <string name="def_screenshot_location">/mnt/sdcard</string>
     <bool name="def_dim_screen">true</bool>
     <integer name="def_screen_off_timeout">60000</integer>
     <bool name="def_airplane_mode_on">false</bool>
@@ -42,6 +46,7 @@
          user opt-in via Setup Wizard or Settings.
     -->
     <string name="def_location_providers_allowed" translatable="false">gps</string>
+    <string name="def_location_providers_allowed_network" translatable="false">network</string>
     <bool name="assisted_gps_enabled">true</bool>
     <bool name="def_netstats_enabled">true</bool>
     <bool name="def_usb_mass_storage_enabled">true</bool>
@@ -78,6 +83,7 @@
     <bool name="def_lockscreen_disabled">false</bool>
     <bool name="def_device_provisioned">false</bool>
     <integer name="def_dock_audio_media_enabled">1</integer>
+    <integer name="def_spdif_output_enabled">0</integer>
 
     <!-- Notifications use ringer volume -->
     <bool name="def_notifications_use_ring_volume">true</bool>
@@ -173,4 +179,6 @@
          0 means no timeout; battery sounds will always play
          >0 is milliseconds of screen-off time after which battery sounds will not play -->
     <integer name="def_low_battery_sound_timeout">0</integer>
+    <!--Default for HDMI_LCD_TIMEOUT-->
+	<integer name="def_hdmi_lcd_timeout">-1</integer>
 </resources>

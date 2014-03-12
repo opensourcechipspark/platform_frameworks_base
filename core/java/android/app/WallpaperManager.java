@@ -45,6 +45,7 @@ import android.os.Message;
 import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 import android.os.ServiceManager;
+import android.os.Build;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.WindowManager;
@@ -948,6 +949,7 @@ public class WallpaperManager {
      * @param yOffset The offset along the Y dimension, from 0 to 1.
      */
     public void setWallpaperOffsets(IBinder windowToken, float xOffset, float yOffset) {
+        if (Build.USE_LCDC_COMPOSER) return;
         try {
             //Log.v(TAG, "Sending new wallpaper offsets from app...");
             WindowManagerGlobal.getWindowSession().setWallpaperPosition(

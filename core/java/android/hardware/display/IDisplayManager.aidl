@@ -64,4 +64,7 @@ interface IDisplayManager {
 
     // No permissions required but must be same Uid as the creator.
     void releaseVirtualDisplay(in IBinder token);
+
+    // szc
+    boolean isWfdConnect();
 }

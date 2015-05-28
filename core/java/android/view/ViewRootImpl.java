@@ -234,8 +234,6 @@ public final class ViewRootImpl implements ViewParent,
     InputStage mFirstInputStage;
     InputStage mFirstPostImeInputStage;
 
-    boolean mFlipControllerFallbackKeys;
-
     boolean mWindowAttributesChanged = false;
     int mWindowAttributesChangesFlag = 0;
 
@@ -373,8 +371,6 @@ public final class ViewRootImpl implements ViewParent,
         mNoncompatDensity = context.getResources().getDisplayMetrics().noncompatDensityDpi;
         mFallbackEventHandler = PolicyManager.makeNewFallbackEventHandler(context);
         mChoreographer = Choreographer.getInstance();
-        mFlipControllerFallbackKeys =
-            context.getResources().getBoolean(R.bool.flip_controller_fallback_keys);
 
         PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
         mAttachInfo.mScreenOn = powerManager.isScreenOn();
@@ -688,11 +684,12 @@ public final class ViewRootImpl implements ViewParent,
         final boolean hardwareAccelerated =
                 (attrs.flags & WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED) != 0;
 
+        drawsoft = true;
         if (hardwareAccelerated) {
             if (!HardwareRenderer.isAvailable()) {
                 return;
             }
-
+            drawsoft = false;
             // Persistent processes (including the system) should not do
             // accelerated rendering on low-end devices.  In that case,
             // sRendererDisabled will be set.  In addition, the system process
@@ -2013,8 +2010,8 @@ public final class ViewRootImpl implements ViewParent,
                     int numValidRequests = validLayoutRequesters.size();
                     for (int i = 0; i < numValidRequests; ++i) {
                         final View view = validLayoutRequesters.get(i);
-                        Log.w("View", "requestLayout() improperly called by " + view +
-                                " during layout: running second layout pass");
+                        //Log.w("View", "requestLayout() improperly called by " + view +
+                        //        " during layout: running second layout pass");
                         view.requestLayout();
                     }
                     measureHierarchy(host, lp, mView.getContext().getResources(),
@@ -2036,8 +2033,8 @@ public final class ViewRootImpl implements ViewParent,
                                 int numValidRequests = finalRequesters.size();
                                 for (int i = 0; i < numValidRequests; ++i) {
                                     final View view = finalRequesters.get(i);
-                                    Log.w("View", "requestLayout() improperly called by " + view +
-                                            " during second layout pass: posting in next frame");
+                                    //Log.w("View", "requestLayout() improperly called by " + view +
+                                    //        " during second layout pass: posting in next frame");
                                     view.requestLayout();
                                 }
                             }
@@ -2252,9 +2249,25 @@ public final class ViewRootImpl implements ViewParent,
             return;
         }
 
-        final boolean fullRedrawNeeded = mFullRedrawNeeded;
+        //final boolean fullRedrawNeeded = mFullRedrawNeeded;
+        boolean fullRedrawNeeded = mFullRedrawNeeded;
         mFullRedrawNeeded = false;
-
+        if(Build.USE_LCDC_COMPOSER && drawsoft){
+            try{
+                mWrotation = mWindowSession.getRotation(mWindow);
+            }catch (RemoteException e){
+                Log.e(TAG, "                performDraw()            getRotation()  error~~~@!    ");
+                mWrotation = -1;
+            }
+            if(mWrotation != mWrotation_old){
+                fulldraw_pit = 5;
+            }
+            mWrotation_old = mWrotation;
+            if(fulldraw_pit > 0){
+                fullRedrawNeeded = true;
+                fulldraw_pit --;
+            }
+        }
         final boolean updateTranformHint = mUpdateTranformHint;
         mUpdateTranformHint = false;
 
@@ -2437,6 +2450,10 @@ public final class ViewRootImpl implements ViewParent,
     /**
      * @return true if drawing was succesfull, false if an error occurred
      */
+    int mWrotation = -1;
+    int mWrotation_old = -2;
+    boolean drawsoft = false;
+    int fulldraw_pit = -1;
     private boolean drawSoftware(Surface surface, AttachInfo attachInfo, int yoff,
             boolean scalingRequired, Rect dirty) {
 
@@ -2448,6 +2465,10 @@ public final class ViewRootImpl implements ViewParent,
             int right = dirty.right;
             int bottom = dirty.bottom;
 
+            mWrotation = mWindowSession.getRotation(mWindow);
+			if(Build.USE_LCDC_COMPOSER){
+                mSurface.ChangeWH(mWrotation);
+			}
             canvas = mSurface.lockCanvas(dirty);
 
             // The dirty rectangle can be modified by Surface.lockCanvas()
@@ -2468,6 +2489,9 @@ public final class ViewRootImpl implements ViewParent,
             // something else, and if it is something else then we could
             // kill stuff (or ourself) for no reason.
             mLayoutRequested = true;    // ask wm for a new surface next time.
+            return false;
+        } catch (RemoteException e){
+            Log.e(TAG, "                drawSoftware()            getRotation()  error~~~@!    ");
             return false;
         }
 
@@ -2508,7 +2532,40 @@ public final class ViewRootImpl implements ViewParent,
                 }
                 canvas.setScreenDensity(scalingRequired ? mNoncompatDensity : 0);
                 attachInfo.mSetIgnoreDirtyState = false;
-
+                if(Build.USE_LCDC_COMPOSER){
+                int center_x = 0, center_y = 0;
+                float rotation = 0;
+                int w = canvas.getWidth();
+                int h = canvas.getHeight();
+                if(mWrotation == 1){    // 0
+                    if(w > h){
+                        rotation = 90;
+                        center_x = (w > h ? w : h) / 2;
+                    }else {
+                        rotation = 90;
+                        center_x = (h < w ? h : w) / 2;
+                    }
+                    center_y = center_x;
+                    canvas.rotate(rotation, center_x, center_y);
+                }
+                if(mWrotation == 3){    // 2
+                    if(w > h){
+                        rotation = -90;
+                        center_x = (h < w ? h : w) / 2;
+                    }else {
+                        rotation = -90;
+                        center_x = (w > h ? w : h) / 2;
+                    }
+                    center_y = center_x;
+                    canvas.rotate(rotation, center_x, center_y);
+                }
+                if(mWrotation == 2){    // 3
+                    rotation = 180;
+                    center_x = w / 2;
+                    center_y = h / 2;
+                    canvas.rotate(rotation, center_x, center_y);   
+                }
+                }
                 mView.draw(canvas);
 
                 drawAccessibilityFocusedDrawableIfNeeded(canvas);
@@ -2931,11 +2988,8 @@ public final class ViewRootImpl implements ViewParent,
                 }
             }
         }
-
-        mFlipControllerFallbackKeys =
-            mContext.getResources().getBoolean(R.bool.flip_controller_fallback_keys);
     }
-
+    
     /**
      * Return true if child is an ancestor of parent, (or equal to the parent).
      */
@@ -4004,7 +4058,6 @@ public final class ViewRootImpl implements ViewParent,
         private final SyntheticJoystickHandler mJoystick = new SyntheticJoystickHandler();
         private final SyntheticTouchNavigationHandler mTouchNavigation =
                 new SyntheticTouchNavigationHandler();
-        private final SyntheticKeyHandler mKeys = new SyntheticKeyHandler();
 
         public SyntheticInputStage() {
             super(null);
@@ -4027,12 +4080,7 @@ public final class ViewRootImpl implements ViewParent,
                     mTouchNavigation.process(event);
                     return FINISH_HANDLED;
                 }
-            } else if (q.mEvent instanceof KeyEvent) {
-                if (mKeys.process((KeyEvent) q.mEvent)) {
-                    return FINISH_HANDLED;
-                }
             }
-
             return FORWARD;
         }
 
@@ -4860,63 +4908,6 @@ public final class ViewRootImpl implements ViewParent,
                 }
             }
         };
-    }
-
-    final class SyntheticKeyHandler {
-
-        public boolean process(KeyEvent event) {
-            // In some locales (like Japan) controllers use B for confirm and A for back, rather
-            // than vice versa, so we need to special case this here since the input system itself
-            // is not locale-aware.
-            int keyCode;
-            switch(event.getKeyCode()) {
-                case KeyEvent.KEYCODE_BUTTON_A:
-                case KeyEvent.KEYCODE_BUTTON_C:
-                case KeyEvent.KEYCODE_BUTTON_X:
-                case KeyEvent.KEYCODE_BUTTON_Z:
-                    keyCode = mFlipControllerFallbackKeys ?
-                        KeyEvent.KEYCODE_BACK : KeyEvent.KEYCODE_DPAD_CENTER;
-                    break;
-                case KeyEvent.KEYCODE_BUTTON_B:
-                case KeyEvent.KEYCODE_BUTTON_Y:
-                    keyCode = mFlipControllerFallbackKeys ?
-                        KeyEvent.KEYCODE_DPAD_CENTER : KeyEvent.KEYCODE_BACK;
-                    break;
-                case KeyEvent.KEYCODE_BUTTON_THUMBL:
-                case KeyEvent.KEYCODE_BUTTON_THUMBR:
-                case KeyEvent.KEYCODE_BUTTON_START:
-                case KeyEvent.KEYCODE_BUTTON_1:
-                case KeyEvent.KEYCODE_BUTTON_2:
-                case KeyEvent.KEYCODE_BUTTON_3:
-                case KeyEvent.KEYCODE_BUTTON_4:
-                case KeyEvent.KEYCODE_BUTTON_5:
-                case KeyEvent.KEYCODE_BUTTON_6:
-                case KeyEvent.KEYCODE_BUTTON_7:
-                case KeyEvent.KEYCODE_BUTTON_8:
-                case KeyEvent.KEYCODE_BUTTON_9:
-                case KeyEvent.KEYCODE_BUTTON_10:
-                case KeyEvent.KEYCODE_BUTTON_11:
-                case KeyEvent.KEYCODE_BUTTON_12:
-                case KeyEvent.KEYCODE_BUTTON_13:
-                case KeyEvent.KEYCODE_BUTTON_14:
-                case KeyEvent.KEYCODE_BUTTON_15:
-                case KeyEvent.KEYCODE_BUTTON_16:
-                    keyCode = KeyEvent.KEYCODE_DPAD_CENTER;
-                    break;
-                case KeyEvent.KEYCODE_BUTTON_SELECT:
-                case KeyEvent.KEYCODE_BUTTON_MODE:
-                    keyCode = KeyEvent.KEYCODE_MENU;
-                default:
-                    return false;
-            }
-
-            enqueueInputEvent(new KeyEvent(event.getDownTime(), event.getEventTime(),
-                        event.getAction(), keyCode, event.getRepeatCount(), event.getMetaState(),
-                        event.getDeviceId(), event.getScanCode(),
-                        event.getFlags() | KeyEvent.FLAG_FALLBACK, event.getSource()));
-            return true;
-        }
-
     }
 
     /**

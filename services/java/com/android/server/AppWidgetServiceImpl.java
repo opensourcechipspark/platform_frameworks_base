@@ -1391,6 +1391,7 @@ class AppWidgetServiceImpl {
             Intent intent = new Intent(AppWidgetManager.ACTION_APPWIDGET_UPDATE);
             intent.putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, appWidgetIds);
             intent.setComponent(p.info.provider);
+            intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
             mContext.sendBroadcastAsUser(intent, new UserHandle(mUserId));
         }
     }

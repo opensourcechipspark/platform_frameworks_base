@@ -93,6 +93,11 @@ final class DisplayMagnifier {
                 com.android.internal.R.integer.config_longAnimTime);
     }
 
+//zxl:get magnify state
+public boolean isMagnifyingLocked()
+{
+	return mMagnifedViewport.isMagnifyingLocked();
+}
     public void setMagnificationSpecLocked(MagnificationSpec spec) {
         mMagnifedViewport.updateMagnificationSpecLocked(spec);
         mMagnifedViewport.recomputeBoundsLocked();
@@ -437,6 +442,7 @@ final class DisplayMagnifier {
         }
 
         public void setMagnifiedRegionBorderShownLocked(boolean shown, boolean animate) {
+
             if (shown) {
                 mFullRedrawNeeded = true;
                 mOldMagnifiedBounds.set(0,  0,  0,  0);

@@ -78,6 +78,16 @@ import com.android.internal.util.Protocol;
 import com.android.internal.util.State;
 import com.android.internal.util.StateMachine;
 
+import java.io.BufferedReader;  
+import java.io.File;  
+import java.io.FileInputStream;  
+import java.io.FileReader;  
+import java.io.IOException;  
+import java.io.InputStream;  
+import java.io.InputStreamReader;  
+import java.io.RandomAccessFile;  
+import java.io.Reader;
+
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.net.InetAddress;
@@ -185,6 +195,8 @@ public class WifiP2pService extends IWifiP2pManager.Stub {
     private final boolean mP2pSupported;
 
     private WifiP2pDevice mThisDevice = new WifiP2pDevice();
+	
+	private WifiP2pDevice mConnectedDevice;
 
     /* When a group has been explicitly created by an app, we persist the group
      * even after all clients have been disconnected until an explicit remove
@@ -797,6 +809,37 @@ public class WifiP2pService extends IWifiP2pManager.Stub {
         }
     }
 
+    public boolean check_if_netif_exist(String ifname)
+    {
+        File file = new File("/proc/net/wireless");
+        BufferedReader reader = null; 
+        try {
+            reader = new BufferedReader(new FileReader(file));  
+            String tempString = null;  
+            int line = 1;  
+            while ((tempString = reader.readLine()) != null){  
+                if (DBG) loge("line " + line + ": " + tempString);  
+                if (tempString.indexOf(ifname) != -1) {
+                    reader.close();  
+                    return true;
+                }
+                line++;  
+            }
+            reader.close();  
+            return false;
+        } catch (IOException e) {
+            e.printStackTrace();  
+        } finally {
+            if (reader != null){  
+                try {  
+                    reader.close();  
+                } catch (IOException e1) {  
+                }  
+            }
+        }
+        return false;
+    }
+
     class P2pDisabledState extends State {
        @Override
         public void enter() {
@@ -809,7 +852,11 @@ public class WifiP2pService extends IWifiP2pManager.Stub {
             switch (message.what) {
                 case WifiStateMachine.CMD_ENABLE_P2P:
                     try {
-                        mNwService.setInterfaceUp(mInterface);
+                        if(check_if_netif_exist(mInterface)) {
+                            mNwService.setInterfaceUp(mInterface);
+                        } else {
+                            loge("Interface: [" + mInterface + "] is not exist.");
+                        }
                     } catch (RemoteException re) {
                         loge("Unable to change interface settings: " + re);
                     } catch (IllegalStateException ie) {
@@ -1524,6 +1571,7 @@ public class WifiP2pService extends IWifiP2pManager.Stub {
                         WifiP2pDevice groupOwner = mGroup.getOwner();
                         WifiP2pDevice peer = mPeers.get(groupOwner.deviceAddress);
                         if (peer != null) {
+							mConnectedDevice = groupOwner;
                             // update group owner details with peer details found at discovery
                             groupOwner.updateSupplicantDetails(peer);
                             mPeers.updateStatus(groupOwner.deviceAddress, WifiP2pDevice.CONNECTED);
@@ -1726,6 +1774,7 @@ public class WifiP2pService extends IWifiP2pManager.Stub {
                         }
                         mPeers.updateStatus(deviceAddress, WifiP2pDevice.CONNECTED);
                         if (DBG) logd(getName() + " ap sta connected");
+						mConnectedDevice = device;
                         sendPeersChangedBroadcast();
                     } else {
                         loge("Connect on null device address, ignore");
@@ -2046,6 +2095,7 @@ public class WifiP2pService extends IWifiP2pManager.Stub {
         intent.putExtra(WifiP2pManager.EXTRA_WIFI_P2P_INFO, new WifiP2pInfo(mWifiP2pInfo));
         intent.putExtra(WifiP2pManager.EXTRA_NETWORK_INFO, new NetworkInfo(mNetworkInfo));
         intent.putExtra(WifiP2pManager.EXTRA_WIFI_P2P_GROUP, new WifiP2pGroup(mGroup));
+		intent.putExtra(WifiP2pManager.EXTRA_WIFI_P2P_DEVICE, new WifiP2pDevice(mConnectedDevice));
         mContext.sendStickyBroadcastAsUser(intent, UserHandle.ALL);
         mWifiChannel.sendMessage(WifiP2pService.P2P_CONNECTION_CHANGED,
                 new NetworkInfo(mNetworkInfo));
@@ -2366,9 +2416,16 @@ public class WifiP2pService extends IWifiP2pManager.Stub {
             }
             if (DBG) logd("netId related with " + dev.deviceAddress + " = " + netId);
             if (netId >= 0) {
-                // Invoke the persistent group.
-                if (mWifiNative.p2pReinvoke(netId, dev.deviceAddress)) {
+                //gwl(Some devices does't support connecting by invite way)
+                String p2pClients = mWifiNative.getNetworkVariable(netId, "p2p_client_list");
+                if (p2pClients != null) {
                     // Save network id. It'll be used when an invitation result event is received.
+                    loge("This device's connection has been saved as GO, Ignored... ");
+                    config.netId = netId;
+                    return false;
+                } else if (mWifiNative.p2pReinvoke(netId, dev.deviceAddress)) {
+                // Invoke the persistent group.
+                //if (mWifiNative.p2pReinvoke(netId, dev.deviceAddress)) {
                     config.netId = netId;
                     return true;
                 } else {

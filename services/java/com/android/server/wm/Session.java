@@ -558,4 +558,7 @@ final class Session extends IWindowSession.Stub
     public String toString() {
         return mStringName;
     }
+  	public int getRotation(IWindow window) {
+      return mService.getScreenRotation();
+   }
 }

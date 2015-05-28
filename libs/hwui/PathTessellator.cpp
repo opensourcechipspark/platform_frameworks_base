@@ -898,6 +898,10 @@ bool PathTessellator::approximatePathOutlineVertices(const SkPath& path, bool fo
         float sqrInvScaleX, float sqrInvScaleY, Vector<Vertex>& outputVertices) {
     ATRACE_CALL();
 
+    if (isnan(sqrInvScaleX) != 0 || isnan(sqrInvScaleY) != 0) {
+        return false;
+    }
+
     // TODO: to support joins other than sharp miter, join vertices should be labelled in the
     // perimeter, or resolved into more vertices. Reconsider forceClose-ing in that case.
     SkPath::Iter iter(path, forceClose);

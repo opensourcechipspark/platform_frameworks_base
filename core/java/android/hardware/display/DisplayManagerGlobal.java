@@ -368,6 +368,16 @@ public final class DisplayManagerGlobal {
         }
     }
 
+	// szc
+    public boolean isWfdConnect() {
+	try {
+	    return mDm.isWfdConnect();
+	} catch (RemoteException ex) {
+            Log.e(TAG, "Failed to get Wifi display status.", ex);
+	    return false;
+	}
+    }
+
     public VirtualDisplay createVirtualDisplay(Context context, String name,
             int width, int height, int densityDpi, Surface surface, int flags) {
         if (TextUtils.isEmpty(name)) {

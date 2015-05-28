@@ -35,6 +35,7 @@ import android.os.UserHandle;
 import android.provider.Settings;
 import android.provider.Settings.SettingNotFoundException;
 import android.text.TextUtils;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.inputmethod.InputMethodInfo;
@@ -768,7 +769,9 @@ class QuickSettingsModel implements BluetoothStateChangeCallback,
         InputMethodManager imm =
                 (InputMethodManager) mContext.getSystemService(Context.INPUT_METHOD_SERVICE);
         List<InputMethodInfo> imis = imm.getInputMethodList();
-
+        if(mImeCallback == null){
+        	return;
+        }
         mImeState.enabled = (visible && needsToShowImeSwitchOngoingNotification(imm));
         mImeState.label = getCurrentInputMethodName(mContext, mContext.getContentResolver(),
                 imm, imis, mContext.getPackageManager());

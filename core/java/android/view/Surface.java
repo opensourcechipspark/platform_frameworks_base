@@ -23,6 +23,7 @@ import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.os.Build;
 import android.util.Log;
 import dalvik.system.CloseGuard;
 
@@ -35,7 +36,8 @@ public class Surface implements Parcelable {
     private static native int nativeCreateFromSurfaceTexture(SurfaceTexture surfaceTexture)
             throws OutOfResourcesException;
     private static native int nativeCreateFromSurfaceControl(int surfaceControlNativeObject);
-
+    
+    private static native void changeWH(int nativeObject, int rotation);
     private static native int nativeLockCanvas(int nativeObject, Canvas canvas, Rect dirty)
             throws OutOfResourcesException;
     private static native void nativeUnlockCanvasAndPost(int nativeObject, Canvas canvas);
@@ -99,6 +101,8 @@ public class Surface implements Parcelable {
      * Rotation constant: 270 degree rotation.
      */
     public static final int ROTATION_270 = 3;
+
+    private static final boolean USE_LCDC_COMPOSER = Build.USE_LCDC_COMPOSER;
 
     /**
      * Create an empty surface, which will later be filled in by readFromParcel().
@@ -240,11 +244,22 @@ public class Surface implements Parcelable {
                 // we just refuse to re-lock the Surface.
                 throw new IllegalStateException("Surface was already locked");
             }
+            if(USE_LCDC_COMPOSER && changewh){
+                changeWH(mNativeObject, mRotation);
+            }
             mLockedObject = nativeLockCanvas(mNativeObject, mCanvas, inOutDirty);
             return mCanvas;
         }
     }
-
+    private boolean changewh = false;
+    private int mRotation = -1;
+    public void ChangeWH(int rotation_){
+	    if(USE_LCDC_COMPOSER){
+            changewh = true;
+            mRotation = rotation_;
+        }
+    }
+    
     /**
      * Posts the new contents of the {@link Canvas} to the surface and
      * releases the {@link Canvas}.

@@ -60,6 +60,7 @@ import com.android.systemui.R;
 
 import java.io.File;
 import java.io.OutputStream;
+import java.io.FileOutputStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import android.os.SystemProperties;
@@ -233,6 +234,17 @@ class SaveImageInBackgroundTask extends AsyncTask<SaveImageInBackgroundData, Voi
         Resources r = context.getResources();
 
         try {
+	/*just for get pic size,because SystemUi can not access sdcard*/
+	String imageDir=Settings.System.getString(context.getContentResolver(), Settings.System.SCREENSHOT_LOCATION);
+	String path = String.format("%s/%s", imageDir,"test83991906");//mImageFilePath;
+	File f = new File(path);
+	f.createNewFile();
+	FileOutputStream test_out = new FileOutputStream(f);
+	image.compress(Bitmap.CompressFormat.PNG, 100, test_out);
+	test_out.flush();
+	test_out.close();
+	long len=f.length();
+	f.delete();
             // Create screenshot directory if it doesn't exist
             mScreenshotDir.mkdirs();
 
@@ -250,6 +262,7 @@ class SaveImageInBackgroundTask extends AsyncTask<SaveImageInBackgroundData, Voi
             values.put(MediaStore.Images.ImageColumns.DATE_ADDED, dateSeconds);
             values.put(MediaStore.Images.ImageColumns.DATE_MODIFIED, dateSeconds);
             values.put(MediaStore.Images.ImageColumns.MIME_TYPE, "image/png");
+			values.put(MediaStore.Images.ImageColumns.SIZE, len);
             values.put(MediaStore.Images.ImageColumns.WIDTH, mImageWidth);
             values.put(MediaStore.Images.ImageColumns.HEIGHT, mImageHeight);
             Uri uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
@@ -276,10 +289,10 @@ class SaveImageInBackgroundTask extends AsyncTask<SaveImageInBackgroundData, Voi
             //out.close();
             saveMyBitmap(image,mImageFilePath);
 
-            // update file size in the database
+            /*// update file size in the database
             values.clear();
             values.put(MediaStore.Images.ImageColumns.SIZE, new File(mImageFilePath).length());
-            resolver.update(uri, values, null, null);
+            resolver.update(uri, values, null, null);*/
 
             params[0].imageUri = uri;
             params[0].image = null;

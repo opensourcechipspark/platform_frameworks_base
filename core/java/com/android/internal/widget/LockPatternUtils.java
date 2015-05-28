@@ -31,6 +31,7 @@ import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.storage.IMountService;
+import android.os.SystemProperties;
 import android.provider.Settings;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
@@ -1000,8 +1001,9 @@ public class LockPatternUtils {
     }
 
     public boolean isEmergencyCallCapable() {
-        return mContext.getResources().getBoolean(
-                com.android.internal.R.bool.config_voice_capable);
+//        return mContext.getResources().getBoolean(
+//                com.android.internal.R.bool.config_voice_capable);
+		  return SystemProperties.getBoolean("ro.voice.capable", false);
     }
 
     public boolean isPukUnlockScreenEnable() {

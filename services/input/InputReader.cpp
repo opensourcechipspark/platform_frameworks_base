@@ -3680,10 +3680,13 @@ void TouchInputMapper::sync(nsecs_t when) {
     static  char myvalue[PROPERTY_VALUE_MAX];
    if(!property_get("sys.hdmi_screen.scale",myvalue,NULL)){
 			scale=100;
-		    }
+		    }else{
+   scale = myvalue[0];
+   }
 		    if(scale <80 || scale >100){
 					scale = 80;
 				    }
+   //ALOGD("----------------------myvalue[0]=%d-----------------scale=%d",myvalue[0],scale);
  /*-------------------------------------------------------------------------------
 error:In function 'int property_get(const char*, char*, const char*)',
     inlined from 'void android::TouchInputMapper::sync(nsecs_t)' at frameworks/base/services/input/InputReader.cpp:3683:57:
@@ -6086,12 +6089,13 @@ void MultiTouchInputMapper::syncTouch(nsecs_t when, bool* outHavePointerIds,int3
         }
 
         RawPointerData::Pointer& outPointer = mCurrentRawPointerData.pointers[outCount];
+    //ALOGD("outPointer.x: %d outPointer.y: %d s_xpos:%d s_ypos:%d scale:%d", outPointer.x, outPointer.y,s_xpos,s_ypos,scale);
     //--begin---modify by yzq --
 	if(scale != 100){
-			    if(inSlot->getX() < s_xpos)
-				outPointer.x = s_xpos;
-			    else if(inSlot->getY() < s_ypos)
-				outPointer.y = s_ypos;
+			    if(inSlot->getX() < s_xpos || inSlot->getX()+s_xpos>width)
+				continue;
+			    else if(inSlot->getY() < s_ypos || inSlot->getY()+s_ypos>height)
+				continue;
 			    else {
 						outPointer.x = (inSlot->getX() - s_xpos)*100/scale;
 						outPointer.y = (inSlot->getY() - s_ypos)*100/scale;

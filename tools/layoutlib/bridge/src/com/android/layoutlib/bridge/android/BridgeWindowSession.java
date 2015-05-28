@@ -216,4 +216,10 @@ public final class BridgeWindowSession implements IWindowSession {
         // pass for now.
         return null;
     }
+
+    @Override
+    public int getRotation(IWindow arg0) {
+        //pass for now
+        return 0;
+    }
 }

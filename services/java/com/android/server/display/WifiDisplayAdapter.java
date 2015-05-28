@@ -757,4 +757,11 @@ final class WifiDisplayAdapter extends DisplayAdapter {
             }
         }
     }
+    
+    // szc:
+    public boolean isWfdConnect() {
+	if (mDisplayController != null)
+	    return mDisplayController.isWfdConnect();
+	return false;
+    }
 }

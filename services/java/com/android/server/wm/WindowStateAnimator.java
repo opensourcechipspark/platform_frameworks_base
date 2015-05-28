@@ -1587,6 +1587,13 @@ class WindowStateAnimator {
                     Slog.v(TAG, "Loaded animation " + a + " for " + this, e);
                 }
                 setAnimation(a);
+	//zxl:close window animation scale when is Magnifying.otherwise it will show error when return from video.
+	  if(mService.mDisplayMagnifier != null && mService.mDisplayMagnifier.isMagnifyingLocked())
+	 {
+		mAnimation.scaleCurrentDuration(0);
+		Slog.v(TAG, "close window animation scale when is Magnifying");
+	 }
+
                 mAnimationIsEntrance = isEntrance;
             }
         } else {

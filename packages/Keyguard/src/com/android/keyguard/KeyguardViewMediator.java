@@ -397,7 +397,12 @@ public class KeyguardViewMediator {
                                 resetStateLocked(null);
                             }
                         }
-                    }
+                        else{
+                            if(isShowing()){
+                                resetStateLocked(null);
+                            }
+                        }
+                        }
                     break;
                 case PIN_REQUIRED:
                 case PUK_REQUIRED:

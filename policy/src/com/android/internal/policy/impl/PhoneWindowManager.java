@@ -105,12 +105,12 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.HashSet;
 
 import static android.view.WindowManager.LayoutParams.*;
 import static android.view.WindowManagerPolicy.WindowManagerFuncs.LID_ABSENT;
 import static android.view.WindowManagerPolicy.WindowManagerFuncs.LID_OPEN;
 import static android.view.WindowManagerPolicy.WindowManagerFuncs.LID_CLOSED;
-
 /**
  * WindowManagerPolicy implementation for the Android phone UI.  This
  * introduces a new method suffix, Lp, for an internal lock of the
@@ -267,10 +267,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     boolean mSystemReady;
     boolean mSystemBooted;
     boolean mHdmiPlugged;
-
-    // add for vga
-    boolean mVgaPlugged;
-
     int mUiMode;
     int mDockMode = Intent.EXTRA_DOCK_STATE_UNDOCKED;
     int mLidOpenRotation;
@@ -304,7 +300,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     boolean mTranslucentDecorEnabled = true;
 
     int mPointerLocationMode = 0; // guarded by mLock
+    boolean mForceUseHwui = false;
+    
+    String playformname = SystemProperties.get("ro.rk.soc");
 
+	
     // The last window we were told about in focusChanged.
     WindowState mFocusedWindow;
     IApplicationToken mFocusedApp;
@@ -385,6 +385,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     static final Rect mTmpNavigationFrame = new Rect();
 
     WindowState mTopFullscreenOpaqueWindowState;
+    HashSet<IApplicationToken> mAppsToBeHidden = new HashSet<IApplicationToken>();
     boolean mTopIsFullscreen;
     boolean mForceStatusBar;
     boolean mForceStatusBarFromKeyguard;
@@ -438,7 +439,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     int mOverscanTop = 0;
     int mOverscanRight = 0;
     int mOverscanBottom = 0;
-
     // What we do when the user long presses on home
     private int mLongPressOnHomeBehavior;
 
@@ -987,14 +987,17 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         // Controls rotation and the like.
         initializeHdmiState();
 
-        initializeVgaState();
-
         // Match current screen state.
         if (mPowerManager.isScreenOn()) {
             screenTurningOn(null);
         } else {
             screenTurnedOff(WindowManagerPolicy.OFF_BECAUSE_OF_USER);
         }
+
+
+		if(playformname.contains("3288")){	
+			mForceUseHwui = true;
+		}			
     }
 
     /**
@@ -1107,7 +1110,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         } else {
             mDemoHdmiRotation = mLandscapeRotation;
         }
-        mDemoHdmiRotationLock = SystemProperties.getBoolean("persist.demo.hdmirotationlock", true);
+        mDemoHdmiRotationLock = SystemProperties.getBoolean("persist.demo.hdmirotationlock", false);
 
         // Only force the default orientation if the screen is xlarge, at least 960dp x 720dp, per
         // http://developer.android.com/guide/practices/screens_support.html#range
@@ -1203,6 +1206,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     private void enablePointerLocation() {
         if (mPointerLocationView == null) {
+			
             mPointerLocationView = new PointerLocationView(mContext);
             mPointerLocationView.setPrintCoords(false);
 
@@ -1219,6 +1223,14 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 lp.privateFlags |=
                         WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_HARDWARE_ACCELERATED;
             }
+            /*  force hardware render   change by daniel(yc) */
+			if(mForceUseHwui){
+            	lp.flags &= (~WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);
+            	lp.privateFlags &=
+                        (~WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_HARDWARE_ACCELERATED);
+			}
+ 			//Log.d(TAG, "enablePointerLocation mForceUseHwui: " + mForceUseHwui);
+
             lp.format = PixelFormat.TRANSLUCENT;
             lp.setTitle("PointerLocation");
             WindowManager wm = (WindowManager)
@@ -1226,12 +1238,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             lp.inputFeatures |= WindowManager.LayoutParams.INPUT_FEATURE_NO_INPUT_CHANNEL;
             wm.addView(mPointerLocationView, lp);
 
+
             mPointerLocationPointerEventListener = new PointerLocationPointerEventListener();
             mWindowManagerFuncs.registerPointerEventListener(mPointerLocationPointerEventListener);
         }
     }
 
     private void disablePointerLocation() {
+
+		
         if (mPointerLocationPointerEventListener != null) {
             mWindowManagerFuncs.unregisterPointerEventListener(
                     mPointerLocationPointerEventListener);
@@ -1244,6 +1259,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             wm.removeView(mPointerLocationView);
             mPointerLocationView = null;
         }
+		
     }
 
     private int readRotation(int resID) {
@@ -1651,6 +1667,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             win.setDefaultIcon(icon);
             win.setDefaultLogo(logo);
 
+			win.setFormat(PixelFormat.RGB_565);
             win.setLayout(WindowManager.LayoutParams.MATCH_PARENT,
                     WindowManager.LayoutParams.MATCH_PARENT);
 
@@ -1661,13 +1678,23 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     com.android.internal.R.styleable.Window_windowAnimationStyle, 0);
             params.privateFlags |=
                     WindowManager.LayoutParams.PRIVATE_FLAG_FAKE_HARDWARE_ACCELERATED;
+            /* force hardware render   change by daniel(yc)  */
+			if(mForceUseHwui)	
+			{
+            	params.flags |= WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
+            	params.privateFlags |=
+                    WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_HARDWARE_ACCELERATED;
+
+			}
+ 			//Log.d(TAG, "Starting@  mForceUseHwui: " + mForceUseHwui);
+
             params.privateFlags |= WindowManager.LayoutParams.PRIVATE_FLAG_SHOW_FOR_ALL_USERS;
 
             if (!compatInfo.supportsScreen()) {
                 params.privateFlags |= WindowManager.LayoutParams.PRIVATE_FLAG_COMPATIBLE_WINDOW;
             }
 
-            params.setTitle("Starting " + packageName);
+            params.setTitle("Starting@# " + packageName);
 
             wm = (WindowManager)context.getSystemService(Context.WINDOW_SERVICE);
             view = win.getDecorView();
@@ -1722,6 +1749,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             WindowManager wm = (WindowManager)mContext.getSystemService(Context.WINDOW_SERVICE);
             wm.removeView(window);
         }
+		
     }
 
     /**
@@ -3300,8 +3328,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                             + mRestrictedScreenWidth;
                     pf.bottom = df.bottom = of.bottom = cf.bottom = mRestrictedScreenTop
                             + mRestrictedScreenHeight;
-                } else if (attrs.type == TYPE_TOAST || attrs.type == TYPE_SYSTEM_ALERT) {
-                    // Toasts are stable to interim decor changes.
+                } else if (attrs.type == TYPE_TOAST || attrs.type == TYPE_SYSTEM_ALERT
+                        || attrs.type == TYPE_VOLUME_OVERLAY) {
+                    // These dialogs are stable to interim decor changes.
                     pf.left = df.left = of.left = cf.left = mStableLeft;
                     pf.top = df.top = of.top = cf.top = mStableTop;
                     pf.right = df.right = of.right = cf.right = mStableRight;
@@ -3387,6 +3416,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     @Override
     public void beginPostLayoutPolicyLw(int displayWidth, int displayHeight) {
         mTopFullscreenOpaqueWindowState = null;
+        mAppsToBeHidden.clear();
         mForceStatusBar = false;
         mForceStatusBarFromKeyguard = false;
         mForcingShowNavBar = false;
@@ -3405,13 +3435,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                                 WindowManager.LayoutParams attrs) {
         if (DEBUG_LAYOUT) Slog.i(TAG, "Win " + win + ": isVisibleOrBehindKeyguardLw="
                 + win.isVisibleOrBehindKeyguardLw());
-        if (mTopFullscreenOpaqueWindowState == null && (win.getAttrs().privateFlags
-                &WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_SHOW_NAV_BAR) != 0
-                || (win.isVisibleLw() && attrs.type == TYPE_INPUT_METHOD)) {
-            if (mForcingShowNavBarLayer < 0) {
-                mForcingShowNavBar = true;
-                mForcingShowNavBarLayer = win.getSurfaceLayer();
-            }
+        if (mTopFullscreenOpaqueWindowState == null
+                && win.isVisibleLw() && attrs.type == TYPE_INPUT_METHOD) {
+            mForcingShowNavBar = true;
+            mForcingShowNavBarLayer = win.getSurfaceLayer();
         }
         if (mTopFullscreenOpaqueWindowState == null &&
                 win.isVisibleOrBehindKeyguardLw() && !win.isGoneForLayoutLw()) {
@@ -3425,7 +3452,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             if (attrs.type == TYPE_KEYGUARD) {
                 mShowingLockscreen = true;
             }
-            boolean applyWindow = attrs.type >= FIRST_APPLICATION_WINDOW
+            boolean appWindow = attrs.type >= FIRST_APPLICATION_WINDOW
                     && attrs.type <= LAST_APPLICATION_WINDOW;
             if (attrs.type == TYPE_DREAM) {
                 // If the lockscreen was showing when the dream started then wait
@@ -3433,30 +3460,41 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 if (!mDreamingLockscreen
                         || (win.isVisibleLw() && win.hasDrawnLw())) {
                     mShowingDream = true;
-                    applyWindow = true;
+                    appWindow = true;
                 }
             }
-            if (applyWindow
-                    && attrs.x == 0 && attrs.y == 0
-                    && attrs.width == WindowManager.LayoutParams.MATCH_PARENT
-                    && attrs.height == WindowManager.LayoutParams.MATCH_PARENT) {
-                if (DEBUG_LAYOUT) Slog.v(TAG, "Fullscreen window: " + win);
-                mTopFullscreenOpaqueWindowState = win;
-                if ((attrs.flags & FLAG_SHOW_WHEN_LOCKED) != 0) {
-                    if (DEBUG_LAYOUT) Slog.v(TAG, "Setting mHideLockScreen to true by win " + win);
-                    mHideLockScreen = true;
-                    mForceStatusBarFromKeyguard = false;
+
+            final boolean showWhenLocked = (attrs.flags & FLAG_SHOW_WHEN_LOCKED) != 0;
+            final boolean dismissKeyguard = (attrs.flags & FLAG_DISMISS_KEYGUARD) != 0;
+            if (appWindow) {
+                if (showWhenLocked || (dismissKeyguard && !isKeyguardSecure())) {
+                    mAppsToBeHidden.remove(win.getAppToken());
+                } else {
+                    mAppsToBeHidden.add(win.getAppToken());
                 }
-                if ((attrs.flags & FLAG_DISMISS_KEYGUARD) != 0
-                        && mDismissKeyguard == DISMISS_KEYGUARD_NONE) {
-                    if (DEBUG_LAYOUT) Slog.v(TAG, "Setting mDismissKeyguard true by win " + win);
-                    mDismissKeyguard = mWinDismissingKeyguard == win ?
-                            DISMISS_KEYGUARD_CONTINUE : DISMISS_KEYGUARD_START;
-                    mWinDismissingKeyguard = win;
-                    mForceStatusBarFromKeyguard = mShowingLockscreen && isKeyguardSecure();
-                }
-                if ((attrs.flags & FLAG_ALLOW_LOCK_WHILE_SCREEN_ON) != 0) {
-                    mAllowLockscreenWhenOn = true;
+                if (attrs.x == 0 && attrs.y == 0
+                        && attrs.width == WindowManager.LayoutParams.MATCH_PARENT
+                        && attrs.height == WindowManager.LayoutParams.MATCH_PARENT) {
+                    if (DEBUG_LAYOUT) Slog.v(TAG, "Fullscreen window: " + win);
+                    mTopFullscreenOpaqueWindowState = win;
+                    if (mAppsToBeHidden.isEmpty()) {
+                        if (showWhenLocked) {
+                            if (DEBUG_LAYOUT) Slog.v(TAG,
+                                    "Setting mHideLockScreen to true by win " + win);
+                            mHideLockScreen = true;
+                            mForceStatusBarFromKeyguard = false;
+                        }
+                        if (dismissKeyguard && mDismissKeyguard == DISMISS_KEYGUARD_NONE) {
+                            if (DEBUG_LAYOUT) Slog.v(TAG, "Setting mDismissKeyguard true by win " + win);
+                            mDismissKeyguard = mWinDismissingKeyguard == win ?
+                                    DISMISS_KEYGUARD_CONTINUE : DISMISS_KEYGUARD_START;
+                            mWinDismissingKeyguard = win;
+                            mForceStatusBarFromKeyguard = mShowingLockscreen && isKeyguardSecure();
+                        }
+                    }
+                    if ((attrs.flags & FLAG_ALLOW_LOCK_WHILE_SCREEN_ON) != 0) {
+                        mAllowLockscreenWhenOn = true;
+                    }
                 }
             }
         }
@@ -3542,7 +3580,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (mKeyguard != null) {
             if (localLOGV) Slog.v(TAG, "finishPostLayoutPolicyLw: mHideKeyguard="
                     + mHideLockScreen);
-            if (mDismissKeyguard != DISMISS_KEYGUARD_NONE && !mKeyguardDelegate.isSecure()) {
+            if (mDismissKeyguard != DISMISS_KEYGUARD_NONE && !isKeyguardSecure()) {
                 if (mKeyguard.hideLw(true)) {
                     changes |= FINISH_LAYOUT_REDO_LAYOUT
                             | FINISH_LAYOUT_REDO_CONFIG
@@ -3688,14 +3726,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         // Always do this so the sticky intent is stuck (to false) if there is no hdmi.
         mHdmiPlugged = !plugged;
         setHdmiPlugged(!mHdmiPlugged);
-    }
-
-    void initializeVgaState() {
-	Log.d(TAG, "initializeVgaState");
-	if (new File("/sys/devices/virtual/switch/vga/state").exists()){
-		Log.d(TAG, "mVgaPlugged=true");
-		mVgaPlugged = true;
-	}
     }
 
     /**
@@ -4309,7 +4339,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
         synchronized (mLock) {
             mScreenOnEarly = true;
-            updateOrientationListenerLp();
+            //updateOrientationListenerLp();
             updateLockScreenTimeout();
         }
 
@@ -4344,6 +4374,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     @Override
                     public void sendResult(Bundle data) {
                         Slog.i(TAG, "Lock screen displayed!");
+            		mHandler.postDelayed(new Runnable() {// add by xzj to prevent display error while rotate and wake up device
+                		public void run() {
+					updateOrientationListenerLp();
+                    		}
+            	    	},500);
                         finishScreenTurningOn(screenOnListener);
                     }
                 })) {
@@ -4357,6 +4392,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
 
         Slog.i(TAG, "No lock screen! windowToken=" + windowToken);
+        mHandler.postDelayed(new Runnable() {// add by xzj to prevent display error while rotate and wake up device
+        	public void run() {
+        		updateOrientationListenerLp();
+        	}    
+        },500);
         finishScreenTurningOn(screenOnListener);
     }
 
@@ -4496,11 +4536,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 // enable 180 degree rotation while docked.
                 preferredRotation = mDeskDockEnablesAccelerometer
                         ? sensorRotation : mDeskDockRotation;
-            } else if ((mHdmiPlugged && mDemoHdmiRotationLock) || mVgaPlugged) {
+            } else if (mHdmiPlugged && mDemoHdmiRotationLock) {
                 // Ignore sensor when plugged into HDMI when demo HDMI rotation lock enabled.
                 // Note that the dock orientation overrides the HDMI orientation.
                 preferredRotation = mDemoHdmiRotation;
-		Log.d(TAG,"Hdmi or Vga plugged,lock orientation");
             } else if (mHdmiPlugged && mDockMode == Intent.EXTRA_DOCK_STATE_UNDOCKED
                     && mUndockedHdmiRotation >= 0) {
                 // Ignore sensor when plugged into HDMI and an undocked orientation has

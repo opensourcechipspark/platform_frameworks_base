@@ -112,6 +112,7 @@ public class EthernetDataTracker implements NetworkStateTracker {
 	private boolean ethConnected;
 	private boolean isEthernetContentObserverRegister;
 	private WifiManager mWifiManager;
+	private boolean isFirstBoot = true;
 
 	private void sendEthStateChangedBroadcast(int curState) {
 		ethCurrentState=curState;
@@ -122,8 +123,19 @@ public class EthernetDataTracker implements NetworkStateTracker {
 		mContext.sendStickyBroadcastAsUser(intent, UserHandle.ALL);
 	}   
 	
+	private boolean findUsbEthNode() {
+		File vmac = new File("/sys/class/vmac/exist");
+                File mdio = new File("/sys/class/mdio_bus/");
+                File[] files = mdio.listFiles();
+		if(vmac.exists() || files.length > 0) {
+			return false;
+		} else {
+			return true;
+		}
+	}	
+	
 	private void acquireWakeLock(Context context) {
-		if (mWakeLock == null) {
+		if (mWakeLock == null && findUsbEthNode()) {
 			PowerManager pm = (PowerManager)context.getSystemService(Context.POWER_SERVICE);
 			mWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"USB Ether");
 			mWakeLock.acquire();
@@ -252,7 +264,7 @@ public class EthernetDataTracker implements NetworkStateTracker {
 	private void handleEnable() {
 		if(DBG) Log.d(TAG, "handleEnable");
 
-		if(mIface.isEmpty() || !isEthernetEnabled() || ethConnected) {
+		if(mIface.isEmpty() || !isEthernetEnabled() || ethConnected || (getEthernetCarrierState()==0)) {
 			if(DBG) Log.d(TAG, "handleEnable: mIface = " + mIface + ", ethConnected = " + ethConnected + ", skip");
 			return;
 		}
@@ -477,7 +489,8 @@ public class EthernetDataTracker implements NetworkStateTracker {
                 
 	               DhcpResults dhcpResults = new DhcpResults();
                 if(!isUsingStaticIp()) {
-						if(DBG) Log.d(TAG, "isUsingStaticIp = false");   
+						if(DBG) Log.d(TAG, "isUsingStaticIp = false");
+                                                NetworkUtils.stopDhcp(mIface);
 						if (!NetworkUtils.runDhcp(mIface, dhcpResults)) {
 			               if(ethCurrentState != ETHER_STATE_DISCONNECTED)
 								 sendEthStateChangedBroadcast(ETHER_STATE_DISCONNECTED);
@@ -586,6 +599,7 @@ public class EthernetDataTracker implements NetworkStateTracker {
         mContext = context;
         mCsHandler = target;
         
+        //isFirstBoot = true;
         mWifiManager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
 
         // register for notifications from NetworkManagement Service
@@ -631,6 +645,8 @@ public class EthernetDataTracker implements NetworkStateTracker {
             }
         } catch (RemoteException e) {
             Log.e(TAG, "Could not get list of interfaces " + e);
+        } catch (Exception e) {
+            Log.e(TAG, "Error upping interface " + mIface + ": " + e);
         }
 
         try {
@@ -655,10 +671,11 @@ public class EthernetDataTracker implements NetworkStateTracker {
      */
     public boolean reconnect() {
         //if (mLinkUp) {
-        if(getEthernetCarrierState() != 0) {
+        if(getEthernetCarrierState() != 0 && !isFirstBoot) {
             mTeardownRequested.set(false);
             connect();
         }
+        isFirstBoot = false;
         return mLinkUp;
     }
 

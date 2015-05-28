@@ -931,8 +931,9 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                                                 (1 << AudioManager.STREAM_NOTIFICATION) |
                                                 (1 << AudioManager.STREAM_SYSTEM) |
                                                 (1 << AudioManager.STREAM_SYSTEM_ENFORCED);
-                if (!mContext.getResources().getBoolean(
-                        com.android.internal.R.bool.config_voice_capable)) {
+//                if (!mContext.getResources().getBoolean(
+//                        com.android.internal.R.bool.config_voice_capable)) {
+				  if (!SystemProperties.getBoolean("ro.voice.capable", false)){
                     ringerModeAffectedStreams |= (1 << AudioManager.STREAM_MUSIC);
                 }
                 db.execSQL("DELETE FROM system WHERE name='"
@@ -1892,8 +1893,9 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                                             (1 << AudioManager.STREAM_NOTIFICATION) |
                                             (1 << AudioManager.STREAM_SYSTEM) |
                                             (1 << AudioManager.STREAM_SYSTEM_ENFORCED);
-            if (!mContext.getResources().getBoolean(
-                    com.android.internal.R.bool.config_voice_capable)) {
+//            if (!mContext.getResources().getBoolean(
+//                    com.android.internal.R.bool.config_voice_capable)) {
+			  if (!SystemProperties.getBoolean("ro.voice.capable", false)){
                 ringerModeAffectedStreams |= (1 << AudioManager.STREAM_MUSIC);
             }
             loadSetting(stmt, Settings.System.MODE_RINGER_STREAMS_AFFECTED,
@@ -1969,9 +1971,9 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
             loadBooleanSetting(stmt, Settings.System.DIM_SCREEN,
                     R.bool.def_dim_screen);
-            loadIntegerSetting(stmt, Settings.System.SCREEN_OFF_TIMEOUT,
-                    R.integer.def_screen_off_timeout);
-
+	    //add for factory as ro.rk.screenoff_time
+            loadSetting(stmt, Settings.System.SCREEN_OFF_TIMEOUT,
+                     SystemProperties.getInt("ro.rk.screenoff_time", mContext.getResources().getInteger(R.integer.def_screen_off_timeout)));
             // Set default cdma DTMF type
             loadSetting(stmt, Settings.System.DTMF_TONE_TYPE_WHEN_DIALING, 0);
 
@@ -1995,8 +1997,9 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             // Set default tty mode
             loadSetting(stmt, Settings.System.TTY_MODE, 0);
 
-            loadIntegerSetting(stmt, Settings.System.SCREEN_BRIGHTNESS,
-                    R.integer.def_screen_brightness);
+	    //add for factory as ro.rk.def_brightness
+	    loadSetting(stmt, Settings.System.SCREEN_BRIGHTNESS,
+		    SystemProperties.getInt("ro.rk.def_brightness", mContext.getResources().getInteger(R.integer.def_screen_brightness)));
 
             loadBooleanSetting(stmt, Settings.System.SCREEN_BRIGHTNESS_MODE,
                     R.bool.def_screen_brightness_automatic_mode);
@@ -2234,8 +2237,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             loadBooleanSetting(stmt, Settings.Global.NETSTATS_ENABLED,
                     R.bool.def_netstats_enabled);
 
-            loadBooleanSetting(stmt, Settings.Global.INSTALL_NON_MARKET_APPS,
-                    R.bool.def_install_non_market_apps);
+	    //add for factory install_non_market_apps
+            loadSetting(stmt, Settings.Secure.INSTALL_NON_MARKET_APPS,
+			    "true".equalsIgnoreCase(
+				    SystemProperties.get("ro.rk.install_non_market_apps",
+					    "false")) ? 1 : 0);
 
             loadBooleanSetting(stmt, Settings.Global.USB_MASS_STORAGE_ENABLED,
                     R.bool.def_usb_mass_storage_enabled);
@@ -2266,11 +2272,9 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                     R.string.def_car_undock_sound);
             loadStringSetting(stmt, Settings.Global.WIRELESS_CHARGING_STARTED_SOUND,
                     R.string.def_wireless_charging_started_sound);
+
             loadIntegerSetting(stmt, Settings.Global.DOCK_AUDIO_MEDIA_ENABLED,
                     R.integer.def_dock_audio_media_enabled);
-
-            loadStringSetting(stmt, Settings.Global.SPDIF_OUTPUT_ENABLED,
-                    R.integer.def_spdif_output_enabled);
 
             loadSetting(stmt, Settings.Global.SET_INSTALL_LOCATION, 0);
             loadSetting(stmt, Settings.Global.DEFAULT_INSTALL_LOCATION,

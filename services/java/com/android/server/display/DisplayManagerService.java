@@ -1328,4 +1328,11 @@ public final class DisplayManagerService extends IDisplayManager.Stub {
             }
         }
     }
+
+	// szc:
+    public boolean isWfdConnect() {
+	if (mWifiDisplayAdapter != null) 
+	    return mWifiDisplayAdapter.isWfdConnect();
+	return false;
+    }
 }

@@ -21,7 +21,9 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.res.Resources;
+import android.content.BroadcastReceiver;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -100,6 +102,7 @@ public class StorageNotification extends SystemUI {
         StorageNotificationEventListener listener = new StorageNotificationEventListener();
         listener.onUsbMassStorageConnectionChanged(connected);
         mStorageManager.registerListener(listener);
+        mContext.registerReceiver(mLocaleReceiver, new IntentFilter(Intent.ACTION_LOCALE_CHANGED));
     }
 
     private void onUsbMassStorageConnectionChangedAsync(boolean connected) {
@@ -281,8 +284,8 @@ public class StorageNotification extends SystemUI {
      * Update the state of the USB mass storage notification
      */
     void updateUsbMassStorageNotification(boolean available) {
-
-        if (available) {
+        boolean hasCDROM = "cdrom".equals(SystemProperties.get("ro.factory.hasUMS", "false"));
+        if (available && !hasCDROM) {
             Intent intent = new Intent();
             intent.setClass(mContext, com.android.systemui.usb.UsbStorageActivity.class);
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -346,7 +349,7 @@ public class StorageNotification extends SystemUI {
                 mContext.getContentResolver(),
                 Settings.Global.ADB_ENABLED,
                 0);
-
+            
             if (POP_UMS_ACTIVITY_ON_CONNECT && !adbOn) {
                 // Pop up a full-screen alert to coach the user through enabling UMS. The average
                 // user has attached the device to USB either to charge the phone (in which case
@@ -369,6 +372,16 @@ public class StorageNotification extends SystemUI {
             notificationManager.cancelAsUser(null, notificationId, UserHandle.ALL);
         }
     }
+
+    //add by huangjc:update UsbMassStorageNotification's language when Locale Changed.
+    private final BroadcastReceiver mLocaleReceiver = new BroadcastReceiver() {
+		@Override
+		public void onReceive(Context context, Intent intent) {
+			boolean UsbConnected = ((StorageManager)context.getSystemService(Context.STORAGE_SERVICE)).isUsbMassStorageConnected();
+		    updateUsbMassStorageNotification(UsbConnected);
+		}
+	};
+    //add-end
 
     private synchronized boolean getMediaStorageNotificationDismissable() {
         if ((mMediaStorageNotification != null) &&

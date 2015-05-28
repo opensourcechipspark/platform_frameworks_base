@@ -76,7 +76,11 @@ import dalvik.system.Zygote;
 import java.io.File;
 import java.util.Timer;
 import java.util.TimerTask;
-
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
 class ServerThread {
     private static final String TAG = "SystemServer";
     private static final String ENCRYPTING_STATE = "trigger_restart_min_framework";
@@ -146,6 +150,7 @@ class ServerThread {
         Context context = null;
         WindowManagerService wm = null;
         BluetoothManagerService bluetooth = null;
+        BluetoothManagerService_bplus bluetooth_bplus = null;
         DockObserver dock = null;
         UsbService usb = null;
         SerialService serial = null;
@@ -339,8 +344,13 @@ class ServerThread {
                 Slog.i(TAG, "Bluetooth Service disabled by config");
             } else {
                 Slog.i(TAG, "Bluetooth Manager Service");
+                if (SystemProperties.get("ro.rk.btchip","").equals("broadcom.bplus")) {
+                bluetooth_bplus = new BluetoothManagerService_bplus(context);
+                ServiceManager.addService(BluetoothAdapter.BLUETOOTH_MANAGER_SERVICE, bluetooth_bplus);
+                } else {
                 bluetooth = new BluetoothManagerService(context);
                 ServiceManager.addService(BluetoothAdapter.BLUETOOTH_MANAGER_SERVICE, bluetooth);
+                }
             }
         } catch (RuntimeException e) {
             Slog.e("System", "******************************************");
@@ -1109,6 +1119,18 @@ class ServerThread {
             Slog.i(TAG, "Enabled StrictMode for system server main thread.");
         }
 
+        String chipType = SystemProperties.get("ro.rk.soc", null);
+	if (chipType.contains("rk312")){
+		String value=SystemProperties.get("persist.sys.display_value");
+		Log.d("bcsh","bootcomplete bcsh display_value="+value+"=========");
+		if(!value.equals("")){
+			setBcsh("open");
+			setBcsh("sat_con "+value);
+		}
+
+	}
+
+
         Looper.loop();
         Slog.d(TAG, "System ServerThread is exiting!");
     }
@@ -1120,6 +1142,24 @@ class ServerThread {
         //Slog.d(TAG, "Starting service: " + intent);
         context.startServiceAsUser(intent, UserHandle.OWNER);
     }
+
+    private void setBcsh(String strbuf){
+	    Log.d("bcsh","systemserver setBcsh str="+strbuf);
+	    File f = new File("/sys/class/graphics/fb0/bcsh");
+	    OutputStream output = null;     
+	    OutputStreamWriter outputWrite = null;
+	    PrintWriter  print = null;
+	    try{ 
+		    output = new FileOutputStream(f);
+		    outputWrite = new OutputStreamWriter(output);
+		    print = new PrintWriter(outputWrite);
+		    print.print(strbuf.toString());
+		    print.flush();
+		    output.close();
+	    } catch (Exception e) { 
+		    e.printStackTrace();
+	    }    
+    }    
 }
 
 public class SystemServer {

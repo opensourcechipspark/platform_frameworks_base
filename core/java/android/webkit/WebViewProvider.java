@@ -187,6 +187,10 @@ public interface WebViewProvider {
 
     public boolean isPaused();
 
+	public void pauseVideo();
+
+	public void notifyEndVideo(int playID);
+
     public void freeMemory();
 
     public void clearCache(boolean includeDiskFiles);

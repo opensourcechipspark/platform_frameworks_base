@@ -5206,6 +5206,12 @@ public final class Settings {
         public static final String SMS_SHORT_CODE_RULE = "sms_short_code_rule";
 
        /**
+        * Used to select TCP's default initial receiver window size in segments - defaults to a build config value
+        * @hide
+        */
+       public static final String TCP_DEFAULT_INIT_RWND = "tcp_default_init_rwnd";
+
+       /**
         * Used to disable Tethering on a device - defaults to true
         * @hide
         */
@@ -5907,13 +5913,6 @@ public final class Settings {
          * @hide
          */
         public static final String DOCK_AUDIO_MEDIA_ENABLED = "dock_audio_media_enabled";
-	/**
-         * Use Dock audio output for spdif:
-         *      0 = disabled
-         *      1 = enabled
-         * @hide
-         */
-        public static final String SPDIF_OUTPUT_ENABLED = "spdif_output";
 
         /**
          * Persisted safe headphone volume management state by AudioService
@@ -6038,8 +6037,7 @@ public final class Settings {
             WIFI_NUM_OPEN_NETWORKS_KEPT,
             EMERGENCY_TONE,
             CALL_AUTO_RETRY,
-            DOCK_AUDIO_MEDIA_ENABLED,
-	    SPDIF_OUTPUT_ENABLED
+            DOCK_AUDIO_MEDIA_ENABLED
         };
 
         // Populated lazily, guarded by class object:

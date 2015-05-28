@@ -686,6 +686,15 @@ public class WebView extends AbsoluteLayout
     }
 
     /**
+     * Used only by internal tests to free up memory.
+     *
+     * @hide
+     */
+    public static void freeMemoryForTests() {
+        getFactory().getStatics().freeMemoryForTests();
+    }
+
+    /**
      * Informs WebView of the network state. This is used to set
      * the JavaScript property window.navigator.isOnline and
      * generates the online/offline event as specified in HTML5, sec. 5.7.7
@@ -1354,6 +1363,24 @@ public class WebView extends AbsoluteLayout
     public boolean isPaused() {
         return mProvider.isPaused();
     }
+
+     /**
+     * Pause the video on current webview.
+     *
+     * @hide
+     */
+	public void pauseVideo() {
+		mProvider.pauseVideo();
+	}
+
+	/**
+	   * Notify the render video has been playback complete.
+	   *
+	   * @hide
+	   */
+	public void notifyEndVideo(int playID) {
+		mProvider.notifyEndVideo(playID);
+	}
 
     /**
      * Informs this WebView that memory is low so that it can free any available

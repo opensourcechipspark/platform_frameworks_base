@@ -75,6 +75,11 @@ public class KeyButtonView extends ImageView {
                 // Log.d("KeyButtonView", "longpressed: " + this);
                 if (mCode != 0) {
                     sendEvent(KeyEvent.ACTION_DOWN, KeyEvent.FLAG_LONG_PRESS);
+                    if (mCode == KeyEvent.KEYCODE_VOLUME_UP) {
+                        mAddHandler.postDelayed(mAddRun, ADJUST_VOLUME_DELAY);
+                    } else if (mCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+                        mSubHandler.postDelayed(mSubRun, ADJUST_VOLUME_DELAY);
+                    }
                     sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_LONG_CLICKED);
                 } else {
                     // Just an old-fashioned ImageView
@@ -328,48 +333,46 @@ public class KeyButtonView extends ImageView {
     }
     
     public void ajustVolume(boolean opition) {
-		        AudioManager audioManager = (AudioManager) getContext().getSystemService(
-		                Context.AUDIO_SERVICE);
-		        if (audioManager != null) {
-				          //
-				            // Adjust the volume in on key down since it is more
-				            // responsive to the user.
-				            //
-				         if (opition) {
-					           audioManager.adjustSuggestedStreamVolume(
-						       AudioManager.ADJUST_RAISE,
-					           AudioManager.USE_DEFAULT_STREAM_TYPE,
-						       AudioManager.FLAG_SHOW_UI | AudioManager.FLAG_REMOVE_SOUND_AND_VIBRATE);
-						           } else {
-						             audioManager.adjustSuggestedStreamVolume(
-				                     AudioManager.ADJUST_LOWER,
-							         AudioManager.USE_DEFAULT_STREAM_TYPE,
-								     AudioManager.FLAG_SHOW_UI | AudioManager.FLAG_REMOVE_SOUND_AND_VIBRATE);
-								          }
-							         }
-								    }
-								
-			   private Handler mAddHandler = new Handler();
-					   private Runnable mAddRun = new Runnable() {
-					          public void run() {
-										      mAddHandler.removeCallbacks(mAddRun);
-										      if (isDown) {
-												       ajustVolume(true);
-												       mAddHandler.postDelayed(mAddRun, ADJUST_VOLUME_DELAY);
-														            }
-														        }
-														    };
-														
-						      private Handler mSubHandler = new Handler();
-							   private Runnable mSubRun = new Runnable() {
-										   public void run() {
-							                     mSubHandler.removeCallbacks(mSubRun);
-																      if (isDown) {
-														          ajustVolume(false);
-													              mSubHandler.postDelayed(mSubRun, ADJUST_VOLUME_DELAY);
-																				            }
-																				        }
-																				    };	
+        AudioManager audioManager = (AudioManager) getContext().getSystemService(
+                Context.AUDIO_SERVICE);
+        if (audioManager != null) {
+            //
+            // Adjust the volume in on key down since it is more
+            // responsive to the user.
+            //
+            if (opition) {
+                audioManager.adjustSuggestedStreamVolume(AudioManager.ADJUST_RAISE,
+                        AudioManager.USE_DEFAULT_STREAM_TYPE, AudioManager.FLAG_SHOW_UI
+                                | AudioManager.FLAG_REMOVE_SOUND_AND_VIBRATE);
+            } else {
+                audioManager.adjustSuggestedStreamVolume(AudioManager.ADJUST_LOWER,
+                        AudioManager.USE_DEFAULT_STREAM_TYPE, AudioManager.FLAG_SHOW_UI
+                                | AudioManager.FLAG_REMOVE_SOUND_AND_VIBRATE);
+            }
+        }
+    }
+
+    private Handler mAddHandler = new Handler();
+    private Runnable mAddRun = new Runnable() {
+        public void run() {
+            mAddHandler.removeCallbacks(mAddRun);
+            if (isPressed()) {
+                ajustVolume(true);
+                mAddHandler.postDelayed(mAddRun, ADJUST_VOLUME_DELAY);
+            }
+        }
+    };
+
+    private Handler mSubHandler = new Handler();
+    private Runnable mSubRun = new Runnable() {
+        public void run() {
+            mSubHandler.removeCallbacks(mSubRun);
+            if (isPressed()) {
+                ajustVolume(false);
+                mSubHandler.postDelayed(mSubRun, ADJUST_VOLUME_DELAY);
+            }
+        }
+    };
 }
 
 

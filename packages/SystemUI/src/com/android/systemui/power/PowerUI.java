@@ -32,6 +32,8 @@ import android.os.Handler;
 import android.os.PowerManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
+import android.os.SystemProperties;
+import android.provider.Settings.SettingNotFoundException;
 import android.provider.Settings;
 import android.util.Slog;
 import android.view.View;
@@ -196,7 +198,32 @@ public class PowerUI extends SystemUI {
 
         CharSequence levelText = mContext.getString(
                 R.string.battery_low_percent_format, mBatteryLevel);
-
+		//add-by huangjc
+		String isBrightness_low = SystemProperties.get("ro.rk.LowBatteryBrightness","false");
+		if("true".equals(isBrightness_low)){
+		PowerManager pmb = (PowerManager)mContext.getSystemService(Context.POWER_SERVICE);
+		int mMininumBacklight = pmb.getMinimumScreenBrightnessSetting();
+		int mMaxnumBacklight = pmb.getMaximumScreenBrightnessSetting();
+		int val = 15*((mMaxnumBacklight-mMininumBacklight)/100)+mMininumBacklight;
+		int brightness;
+		boolean automaticMode=false;
+        try{
+			// 获取当前系统亮度值
+			brightness = Settings.System.getInt(mContext.getContentResolver(),Settings.System.SCREEN_BRIGHTNESS);
+			// 获取当前系统调节模式
+			automaticMode = Settings.System.getInt(mContext.getContentResolver(),Settings.System.SCREEN_BRIGHTNESS_MODE) == Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC;
+			}catch (SettingNotFoundException e)
+            {
+				 }
+		if(automaticMode)
+			Settings.System.putInt(mContext.getContentResolver(),
+			                 Settings.System.SCREEN_BRIGHTNESS_MODE, 
+							 Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL);	
+		Settings.System.putInt(mContext.getContentResolver(),
+	                       Settings.System.SCREEN_BRIGHTNESS, val);
+		              
+		}
+		//add-end
         if (mBatteryLevelTextView != null) {
             mBatteryLevelTextView.setText(levelText);
         } else {

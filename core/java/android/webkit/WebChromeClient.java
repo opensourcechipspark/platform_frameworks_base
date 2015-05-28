@@ -100,6 +100,12 @@ public class WebChromeClient {
     public void onHideCustomView() {}
 
     /**
+     * Receive new video url
+     * @hide
+     */
+    public void onReceivedVideoUrl(WebView view, String url, int playID) {}
+
+    /**
      * Request the host application to create a new window. If the host
      * application chooses to honor this request, it should return true from
      * this method, create a new WebView to host the window, insert it into the

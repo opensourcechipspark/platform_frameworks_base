@@ -173,7 +173,8 @@ bool OpenGLRenderer::isDeferred() {
 void OpenGLRenderer::setViewport(int width, int height) {
     initViewport(width, height);
 
-    glDisable(GL_DITHER);
+   // glDisable(GL_DITHER);
+    glEnable(GL_DITHER);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
     glEnableVertexAttribArray(Program::kBindingPosition);

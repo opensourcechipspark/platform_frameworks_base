@@ -943,7 +943,7 @@ public class UserManagerService extends IUserManager.Stub {
         try {
             synchronized (mInstallLock) {
                 synchronized (mPackagesLock) {
-                    if (isUserLimitReachedLocked()) return null;
+                    if (isUserLimitReachedLocked()&&mRemovingUserIds.size()==0) return null;
                     int userId = getNextAvailableIdLocked();
                     userInfo = new UserInfo(userId, name, null, flags);
                     File userPath = new File(mBaseUserPath, Integer.toString(userId));

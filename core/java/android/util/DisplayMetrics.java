@@ -296,7 +296,9 @@ public class DisplayMetrics {
         // when running in the emulator, allowing for dynamic configurations.
         // The reason for this is that ro.sf.lcd_density is write-once and is
         // set by the init process when it parses build.prop before anything else.
-        return SystemProperties.getInt("qemu.sf.lcd_density",
+        //return SystemProperties.getInt("qemu.sf.lcd_density",
+		// add lly@rock-chips.com
+	     return SystemProperties.getInt("persist.sys.lcd_density",
                 SystemProperties.getInt("ro.sf.lcd_density", DENSITY_DEFAULT));
     }
 }

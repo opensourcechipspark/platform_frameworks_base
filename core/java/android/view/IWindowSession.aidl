@@ -196,4 +196,7 @@ interface IWindowSession {
     void onRectangleOnScreenRequested(IBinder token, in Rect rectangle, boolean immediate);
 
     IWindowId getWindowId(IBinder window);
+
+    int getRotation(IWindow window);
+
 }

@@ -76,6 +76,10 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.RandomAccessFile;
 //--------end----------------
+
+import android.hardware.display.DisplayManager;
+import android.net.wifi.WifiManager;
+
 /**
  * The power manager service is responsible for coordinating power management
  * functions on the device.
@@ -95,6 +99,8 @@ public final class PowerManagerService extends IPowerManager.Stub
     private static final int MSG_SCREEN_ON_BLOCKER_RELEASED = 3;
     // Message: Sent to poll whether the boot animation has terminated.
     private static final int MSG_CHECK_IF_BOOT_ANIMATION_FINISHED = 4;
+
+	private static final int MSG_DISABLE_WIFI_FOR_WIFIP2P = 5;
 
     // Dirty bit: mWakeLocks changed
     private static final int DIRTY_WAKE_LOCKS = 1 << 0;
@@ -383,6 +389,8 @@ public final class PowerManagerService extends IPowerManager.Stub
     private static native void nativeReleaseSuspendBlocker(String name);
     private static native void nativeSetInteractive(boolean enable);
     private static native void nativeSetAutoSuspend(boolean enable);
+	private DisplayManager mDisplayManager;
+    private WifiManager mWifiManager;
 
     public PowerManagerService() {
         synchronized (mLock) {
@@ -427,6 +435,7 @@ public final class PowerManagerService extends IPowerManager.Stub
         // activity manager is not running when the constructor is called, so we
         // have to defer setting the screen state until this point.
         mDisplayBlanker.unblankAllDisplays();
+		mDisplayManager = (DisplayManager) mContext.getSystemService(Context.DISPLAY_SERVICE);	// szc
     }
 
     public void setPolicy(WindowManagerPolicy policy) {
@@ -1137,6 +1146,13 @@ public final class PowerManagerService extends IPowerManager.Stub
 
     // Called from native code.
     private void goToSleepFromNative(long eventTime, int reason) {
+    if (reason != PowerManager.GO_TO_SLEEP_REASON_DEVICE_ADMIN 
+		&& reason != PowerManager.GO_TO_SLEEP_REASON_TIMEOUT) { //szc
+	    if (mDisplayManager.isWfdConnect()) {
+		mHandler.sendEmptyMessage(MSG_DISABLE_WIFI_FOR_WIFIP2P);
+		return;
+	    }
+	}
         goToSleepInternal(eventTime, reason);
     }
 
@@ -1249,6 +1265,9 @@ public final class PowerManagerService extends IPowerManager.Stub
     private void updatePowerStateLocked() {
         if (!mSystemReady || mDirty == 0) {
             return;
+        }
+        if (!Thread.holdsLock(mLock)) {
+            Slog.wtf(TAG, "Power manager lock was not held when calling updatePowerStateLocked");
         }
 
         // Phase 0: Basic state updates.
@@ -1965,7 +1984,7 @@ public final class PowerManagerService extends IPowerManager.Stub
         updatePowerStateLocked();
     }
 
-    private void startWatchingForBootAnimationFinished() {
+    public void startWatchingForBootAnimationFinished() {
         mHandler.sendEmptyMessage(MSG_CHECK_IF_BOOT_ANIMATION_FINISHED);
     }
 
@@ -2537,7 +2556,7 @@ public final class PowerManagerService extends IPowerManager.Stub
             // Defer transitioning into the boot completed state until the animation exits.
             // We do this so that the screen does not start to dim prematurely before
             // the user has actually had a chance to interact with the device.
-            startWatchingForBootAnimationFinished();
+           // startWatchingForBootAnimationFinished();
         }
     }
 
@@ -2610,6 +2629,11 @@ public final class PowerManagerService extends IPowerManager.Stub
                 case MSG_CHECK_IF_BOOT_ANIMATION_FINISHED:
                     checkIfBootAnimationFinished();
                     break;
+				case MSG_DISABLE_WIFI_FOR_WIFIP2P:	//szc
+		            mWifiManager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
+		            mWifiManager.setWifiEnabled(false);
+	                mWifiManager.setWifiEnabled(true);
+		            break;
             }
         }
     }

@@ -18,6 +18,9 @@ package com.android.systemui.settings;
 
 import android.content.ContentResolver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.BroadcastReceiver;
 import android.database.ContentObserver;
 import android.net.Uri;
 import android.os.AsyncTask;
@@ -27,9 +30,11 @@ import android.os.PowerManager;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.UserHandle;
+import android.os.SystemProperties;
 import android.provider.Settings;
 import android.provider.Settings.SettingNotFoundException;
 import android.widget.ImageView;
+import android.util.Log;
 
 import java.util.ArrayList;
 
@@ -38,6 +43,8 @@ public class BrightnessController implements ToggleSlider.Listener {
 
     private final int mMinimumBacklight;
     private final int mMaximumBacklight;
+    private final int mLowBatteryLevel;
+    private  int mBatteryLevel;
 
     private final Context mContext;
     private final ImageView mIcon;
@@ -105,7 +112,19 @@ public class BrightnessController implements ToggleSlider.Listener {
         }
 
     }
-
+     //add by huangjc
+     class BatteryReceiver extends BroadcastReceiver{
+		               @Override
+		               public void onReceive(Context context, Intent intent) {
+				            if(Intent.ACTION_BATTERY_CHANGED.equals(intent.getAction())){
+						            mBatteryLevel = intent.getIntExtra("level", 0);
+						           // Log.d("hjc","------>mBatteryLevel:"+mBatteryLevel);
+				String isBrightness_low = SystemProperties.get("ro.rk.LowBatteryBrightness","false"); 
+				if("true".equals(isBrightness_low) && !(mBatteryLevel>mLowBatteryLevel)){
+						mControl.setOnChangedListener(null);
+						updateSlider();
+						}                
+     }}}//end
     public BrightnessController(Context context, ImageView icon, ToggleSlider control) {
         mContext = context;
         mIcon = icon;
@@ -118,6 +137,12 @@ public class BrightnessController implements ToggleSlider.Listener {
                 updateSlider();
             }
         };
+		//add by huangjc
+		             IntentFilter intentFilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+		             BatteryReceiver batteryReceiver = new BatteryReceiver();
+		             mContext.registerReceiver(batteryReceiver, intentFilter);
+		mLowBatteryLevel = context.getResources().getInteger(com.android.internal.R.integer.config_lowBatteryWarningLevel);
+		             //end
         mBrightnessObserver = new BrightnessObserver(mHandler);
         mBrightnessObserver.startObserving();
 

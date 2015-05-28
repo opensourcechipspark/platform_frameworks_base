@@ -217,6 +217,24 @@ public abstract class WebSettings {
         throw new MustOverrideException();
     }
 
+     /**
+     * Set whether enable pop window video playback support.
+     *
+     * @hide
+     */
+	public void setPopupVideoEnable(boolean enable) {
+		throw new MustOverrideException();
+	}
+
+	   /**
+     * whether enable pop window video playback support.
+     *
+     * @hide
+     */
+	public boolean isPopupVideoEnable() {
+		throw new MustOverrideException();
+	}
+
     /**
      * Gets whether the WebView supports zoom.
      *

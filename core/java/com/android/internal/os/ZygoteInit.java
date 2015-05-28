@@ -47,6 +47,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import android.os.Process;
+
 
 /**
  * Startup class for the zygote process.
@@ -64,6 +66,8 @@ public class ZygoteInit {
     private static final String TAG = "Zygote";
 
     private static final String PROPERTY_DISABLE_OPENGL_PRELOADING = "ro.zygote.disable_gl_preload";
+
+	private static final String PROPERTY_FIRST_TIME_BOOTING = "persist.sys.first_booting";
 
     private static final String ANDROID_SOCKET_ENV = "ANDROID_SOCKET_zygote";
 
@@ -192,13 +196,29 @@ public class ZygoteInit {
     static void closeServerSocket() {
         try {
             if (sServerSocket != null) {
+                FileDescriptor fd = sServerSocket.getFileDescriptor();
                 sServerSocket.close();
+                if (fd != null) {
+                    Libcore.os.close(fd);
+                }
             }
         } catch (IOException ex) {
             Log.e(TAG, "Zygote:  error closing sockets", ex);
+        } catch (libcore.io.ErrnoException ex) {
+            Log.e(TAG, "Zygote:  error closing descriptor", ex);
         }
 
         sServerSocket = null;
+    }
+
+    /**
+     * Return the server socket's underlying file descriptor, so that
+     * ZygoteConnection can pass it to the native code for proper
+     * closure after a child process is forked off.
+     */
+
+    static FileDescriptor getServerSocketFileDescriptor() {
+        return sServerSocket.getFileDescriptor();
     }
 
     private static final int UNPRIVILEGED_UID = 9999;
@@ -289,7 +309,7 @@ public class ZygoteInit {
                             Log.v(TAG, "Preloading " + line + "...");
                         }
                         Class.forName(line);
-                        if (Debug.getGlobalAllocSize() > PRELOAD_GC_THRESHOLD) {
+                        if (Debug.getGlobalAllocSize() > PRELOAD_GC_THRESHOLD*4) {
                             if (false) {
                                 Log.v(TAG,
                                     " GC at " + Debug.getGlobalAllocSize());
@@ -559,12 +579,17 @@ public class ZygoteInit {
             SamplingProfilerIntegration.start();
 
             registerZygoteSocket();
-            EventLog.writeEvent(LOG_BOOT_PROGRESS_PRELOAD_START,
-                SystemClock.uptimeMillis());
-            preload();
-            EventLog.writeEvent(LOG_BOOT_PROGRESS_PRELOAD_END,
-                SystemClock.uptimeMillis());
-
+			 // Finish profiling the zygote initialization.
+			boolean isFirstBooting = false;
+			//if first time booting and zygote restart need preload full class
+			if(Process.myPid() > 300 || SystemProperties.getBoolean(PROPERTY_FIRST_TIME_BOOTING, true)){
+				EventLog.writeEvent(LOG_BOOT_PROGRESS_PRELOAD_START,
+				    SystemClock.uptimeMillis());
+				preload();
+				isFirstBooting = true;
+				EventLog.writeEvent(LOG_BOOT_PROGRESS_PRELOAD_END,
+				    SystemClock.uptimeMillis());
+			}
             // Finish profiling the zygote initialization.
             SamplingProfilerIntegration.writeZygoteSnapshot();
 
@@ -587,7 +612,14 @@ public class ZygoteInit {
             }
 
             Log.i(TAG, "Accepting command socket connections");
-
+			if(!isFirstBooting){
+				EventLog.writeEvent(LOG_BOOT_PROGRESS_PRELOAD_START,
+				    SystemClock.uptimeMillis());
+				preload();
+				EventLog.writeEvent(LOG_BOOT_PROGRESS_PRELOAD_END,
+				    SystemClock.uptimeMillis());
+				gc();
+			}
             runSelectLoop();
 
             closeServerSocket();

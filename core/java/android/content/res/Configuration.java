@@ -22,6 +22,7 @@ import android.os.Parcelable;
 import android.os.Build;
 import android.text.TextUtils;
 import android.view.View;
+import android.os.SystemProperties;
 
 import java.util.Locale;
 
@@ -880,7 +881,9 @@ public final class Configuration implements Parcelable, Comparable<Configuration
         }
         if (delta.rotation != ROTATION_UNDEFINED
                 && rotation != delta.rotation) {
-            if (Build.USE_LCDC_COMPOSER) {
+			boolean PLATFORM_RK32xx = SystemProperties.get("ro.rk.soc", "unknown").equals("rk3288");
+            if (PLATFORM_RK32xx || Build.USE_LCDC_COMPOSER)
+           {
                 if (Math.abs(delta.rotation - rotation) == 2) {
                     changed |= ActivityInfo.CONFIG_ORIENTATION;
                 }
@@ -1029,7 +1032,9 @@ public final class Configuration implements Parcelable, Comparable<Configuration
         }
         if (delta.rotation != ROTATION_UNDEFINED
                 && rotation != delta.rotation) {
-            if (Build.USE_LCDC_COMPOSER) {
+			boolean PLATFORM_RK32xx = SystemProperties.get("ro.rk.soc", "unknown").equals("rk3288");
+            if (PLATFORM_RK32xx || Build.USE_LCDC_COMPOSER)
+				{
                 if (Math.abs(delta.rotation - rotation) == 2) {
                     changed |= ActivityInfo.CONFIG_ORIENTATION;
                 }

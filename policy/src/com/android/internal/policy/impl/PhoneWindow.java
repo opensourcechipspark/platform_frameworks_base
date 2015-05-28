@@ -99,6 +99,14 @@ import android.widget.TextView;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import com.android.internal.telephony.CallManager;
+
+import android.content.pm.PackageManager;
+import android.os.SystemProperties;
+import android.graphics.PointF;
+import android.widget.Toast;
+import android.content.Intent;
+import android.content.ComponentName;
 
 /**
  * Android-specific Window.
@@ -1623,6 +1631,7 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
                 // eat the event instead, because we have mVolumeControlStreamType
                 // and they don't.
                 getAudioManager().handleKeyUp(event, mVolumeControlStreamType);
+                                       CallManager.getInstance().handleKeyUp(event, mVolumeControlStreamType);
                 return true;
             }
 
@@ -2010,9 +2019,119 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
             return false;
         }
 
+        class TouchPoint {
+            PointF startPoint;
+            PointF endPoint;
+            boolean mFinished = false;
+
+            public TouchPoint() {
+                startPoint = new PointF();
+                endPoint = new PointF();
+            }
+
+            public void setStartPointAxis(float startx, float starty) {
+                startPoint.set(startx, starty);
+            }
+
+            public void setEndPointAxis(float endx, float endy) {
+                endPoint.set(endx, endy);
+            }
+
+            public void setFinished(boolean finish) {
+                mFinished = finish;
+            }
+        }
+
+        private float DISTANCE_ACTION = 500f;
+
+        private boolean mFaceDetectionMode = false;
+        private boolean mEnableFaceDetection = SystemProperties.getBoolean("sys.platform.facedetection", false);
+        ArrayList<TouchPoint> mTouchPointArray = new ArrayList<TouchPoint>();
+
+        private float distanceX(TouchPoint tp) {
+            return Math.abs(tp.endPoint.x - tp.startPoint.x);
+        }
+
+        boolean triggerFaceDetectionMode(ArrayList<TouchPoint> tpArray) {
+            try {
+                mContext.getPackageManager().getPackageInfo("com.rockchip.projectx",PackageManager.GET_ACTIVITIES);
+            } catch(PackageManager.NameNotFoundException e) {
+                return false;
+            }
+
+            for (int i = 0; i < 4; i++) {
+                TouchPoint tp = tpArray.get(i);
+                if (distanceX(tp) < this.DISTANCE_ACTION) {
+                    return false;
+                }
+            }
+
+            ComponentName cn = new ComponentName("com.rockchip.projectx",
+                    "com.rockchip.projectx.FaceTrackingWindow");
+            Intent intent = new Intent(Intent.ACTION_MAIN, null);
+            intent.setComponent(cn);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            mContext.startActivity(intent);
+
+            Toast.makeText(mContext, "FACE DETECTION MODE TRIGGER",
+                    Toast.LENGTH_LONG).show();
+            return true;
+        }
+
         @Override
         public boolean dispatchTouchEvent(MotionEvent ev) {
             final Callback cb = getCallback();
+            if (mEnableFaceDetection) {
+                int pointCount = ev.getPointerCount();
+
+                switch (ev.getAction() & MotionEvent.ACTION_MASK) {
+                case MotionEvent.ACTION_POINTER_DOWN:
+                    if (pointCount == 4) {
+                        for (int i = 0; i < 4; i++) {
+                            TouchPoint tp = new TouchPoint();
+                            tp.setStartPointAxis(ev.getX(i), ev.getY(i));
+                            mTouchPointArray.add(tp);
+                        }
+                        mFaceDetectionMode = true;
+                        // Under face detection mode, we have consume the motion event.
+                        return true;
+
+                    } else if (pointCount > 4) {
+                        mFaceDetectionMode = false;
+                        mTouchPointArray.clear();
+                    }
+                    break;
+                case MotionEvent.ACTION_POINTER_UP:
+                    if (mFaceDetectionMode) {
+                        int pointId = ev.getPointerId(ev.getActionIndex());
+                        TouchPoint tp = mTouchPointArray.get(pointId);
+                        tp.setFinished(true);
+                        tp.setEndPointAxis(ev.getX(), ev.getY());
+                        // Under face detection mode, we have consume the motion event.
+                        return true;
+                    }
+                    break;
+                case MotionEvent.ACTION_UP:
+                    int pointId = ev.getPointerId(ev.getActionIndex());
+                    if (mFaceDetectionMode) {
+                        TouchPoint tp = mTouchPointArray.get(pointId);
+                        tp.setEndPointAxis(ev.getX(), ev.getY());
+                        triggerFaceDetectionMode(mTouchPointArray);
+                        mTouchPointArray.clear();
+                        mFaceDetectionMode = false;
+                        // Under face detection mode, we have consume the motion event.
+                        return true;
+                    }
+                    break;
+                case MotionEvent.ACTION_MOVE:
+                    if (mFaceDetectionMode) {
+                        // Under face detection mode, we have consume the motion event.
+                        return true;
+                    }
+                    break;
+                }
+            }
+
             return cb != null && !isDestroyed() && mFeatureId < 0 ? cb.dispatchTouchEvent(ev)
                     : super.dispatchTouchEvent(ev);
         }
@@ -3039,6 +3158,10 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
         if (getContainer() == null) {
             Drawable drawable = mBackgroundDrawable;
             if (mBackgroundResource != 0) {
+                if(com.android.internal.R.drawable.screen_background_selector_dark == mBackgroundResource && 
+                    params.type == WindowManager.LayoutParams.TYPE_APPLICATION_STARTING){
+                    mBackgroundResource = com.android.internal.R.drawable.background_holo_dark_starting;
+                }
                 drawable = getContext().getResources().getDrawable(mBackgroundResource);
             }
             mDecor.setWindowBackground(drawable);

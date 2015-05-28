@@ -360,7 +360,7 @@ public final class URLUtil {
                 }
             }
         } else {
-            if (mimeType != null) {
+            if (mimeType != null && !mimeType.equalsIgnoreCase("text/plain")) {
                 // Compare the last segment of the extension against the mime type.
                 // If there's a mismatch, discard the entire extension.
                 int lastDotIndex = filename.lastIndexOf('.');

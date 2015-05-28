@@ -442,6 +442,16 @@ public final class DisplayManager {
         return mGlobal.createVirtualDisplay(mContext,
                 name, width, height, densityDpi, surface, flags);
     }
+	
+	/**
+     * Judge the wfp p2p CONNECT status(add by szc).
+     *
+     * @return The current wfd p2p CONNECT status.
+     * @hide
+     */ 
+    public boolean isWfdConnect() {
+	return mGlobal.isWfdConnect();
+    }
 
     /**
      * Listens for changes in available display devices.

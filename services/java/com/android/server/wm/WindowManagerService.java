@@ -88,6 +88,7 @@ import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.WorkSource;
+import android.os.Build;
 import android.provider.Settings;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
@@ -297,6 +298,8 @@ public class WindowManagerService extends IWindowManager.Stub
 
     private final boolean mHeadless;
 
+    private native boolean nativeAuditContext(WindowState stat);
+
     final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -307,6 +310,8 @@ public class WindowManagerService extends IWindowManager.Stub
             }
         }
     };
+
+    private int mPtr;
 
     // Current user when multi-user is enabled. Don't show windows of non-current user.
     int mCurrentUserId;
@@ -506,7 +511,8 @@ public class WindowManagerService extends IWindowManager.Stub
     /** If true hold off on modifying the animation layer of mInputMethodTarget */
     boolean mInputMethodTargetWaitingAnim;
     int mInputMethodAnimLayerAdjustment;
-
+    WindowState mSpecialInputMethodWindow = null;
+	private static final boolean USE_LCDC_COMPOSER = Build.USE_LCDC_COMPOSER;
     WindowState mInputMethodWindow = null;
     final ArrayList<WindowState> mInputMethodDialogs = new ArrayList<WindowState>();
 
@@ -826,6 +832,7 @@ public class WindowManagerService extends IWindowManager.Stub
         } finally {
             SurfaceControl.closeTransaction();
         }
+        SystemProperties.set("sys.gui.special", "false");
     }
 
     public InputMonitor getInputMonitor() {
@@ -2392,6 +2399,10 @@ public class WindowManagerService extends IWindowManager.Stub
             if (win == null) {
                 return;
             }
+            if(USE_LCDC_COMPOSER && win == mSpecialInputMethodWindow){
+                SystemProperties.set("sys.gui.special", "false");
+                mSpecialInputMethodWindow = null;
+            }
             removeWindowLocked(session, win);
         }
     }
@@ -3059,6 +3070,21 @@ public class WindowManagerService extends IWindowManager.Stub
 
             if (DEBUG_LAYOUT) {
                 Slog.v(TAG, "Relayout complete " + win + ": outFrame=" + outFrame.toShortString());
+            }
+            if(USE_LCDC_COMPOSER && mSpecialInputMethodWindow == null){
+                if(win.mAttachedWindow != null && win.mAttachedWindow.mIsImWindow && win.mIsImWindow){
+                    if(mCurrentFocus != null && mCurrentFocus == mInputMethodTarget){
+                        if((win.mFrame.left < win.mParentFrame.left ||
+                            win.mFrame.right > win.mParentFrame.right ||
+                            win.mFrame.top < win.mParentFrame.top ||
+                            win.mFrame.bottom > win.mParentFrame.bottom) &&
+                            ((win.mParentFrame.right - win.mParentFrame.left) <= (win.mFrame.right - win.mFrame.left)) &&
+                            ((win.mParentFrame.bottom - win.mParentFrame.top) <= (win.mFrame.bottom - win.mFrame.top))){
+                            mSpecialInputMethodWindow = win;
+                            SystemProperties.set("sys.gui.special", "true");
+                        }
+                    }
+                }				
             }
         }
 
@@ -5376,9 +5402,15 @@ public class WindowManagerService extends IWindowManager.Stub
                     return;
                 }
             }
+	    mH.postDelayed(new Runnable() {
+			    @Override
+			    public void run() {
 
+			    mPowerManager.startWatchingForBootAnimationFinished();
+			    }
+	    },2000);
             mDisplayEnabled = true;
-            if (DEBUG_SCREEN_ON || DEBUG_BOOT) Slog.i(TAG, "******************** ENABLING SCREEN!");
+            if (DEBUG_SCREEN_ON || DEBUG_BOOT) Slog.i(TAG, "******=================************** ENABLING SCREEN!");
             if (false) {
                 StringWriter sw = new StringWriter();
                 PrintWriter pw = new FastPrintWriter(sw, false, 1024);
@@ -6069,6 +6101,12 @@ public class WindowManagerService extends IWindowManager.Stub
         return true;
     }
 
+    public int getScreenRotation() {
+        if (!USE_LCDC_COMPOSER || mSpecialInputMethodWindow == null) {
+            return -1;
+        }
+		return mRotation;
+    }
     @Override
     public int getRotation() {
         return mRotation;
@@ -9832,7 +9870,15 @@ public class WindowManagerService extends IWindowManager.Stub
                     mCurrentFocus + " to " + newFocus + " Callers=" + Debug.getCallers(4));
             final WindowState oldFocus = mCurrentFocus;
             mCurrentFocus = newFocus;
-            mLosingFocus.remove(newFocus);
+            if(USE_LCDC_COMPOSER && mCurrentFocus != null && mSpecialInputMethodWindow != null){
+                if(mCurrentFocus != mInputMethodTarget){
+                    SystemProperties.set("sys.gui.special", "false");
+                }
+            }
+            if (nativeAuditContext(newFocus)) {
+                mLosingFocus.remove(newFocus);
+            }
+
             int focusChanged = mPolicy.focusChangedLw(oldFocus, newFocus);
 
             if (imWindowChanged && oldFocus != mInputMethodWindow) {

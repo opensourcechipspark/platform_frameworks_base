@@ -29,6 +29,7 @@ import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
+import android.os.SystemProperties;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.AttributeSet;
@@ -54,6 +55,8 @@ class KeyguardMessageArea extends TextView {
      * lift-to-type from interrupting itself.
      */
     private static final long ANNOUNCEMENT_DELAY = 250;
+    
+    private final boolean hasNoBattery = "true".equals(SystemProperties.get("ro.factory.without_battery", "false"));
 
     static final int CHARGING_ICON = 0; //R.drawable.ic_lock_idle_charging;
     static final int BATTERY_LOW_ICON = 0; //R.drawable.ic_lock_idle_low_battery;
@@ -221,7 +224,7 @@ class KeyguardMessageArea extends TextView {
         MutableInt icon = new MutableInt(0);
         CharSequence status = concat(getChargeInfo(icon), getOwnerInfo(), getCurrentMessage());
         setCompoundDrawablesWithIntrinsicBounds(icon.value, 0, 0, 0);
-        setText(status);
+        if(!hasNoBattery) setText(status);
     }
 
     private CharSequence concat(CharSequence... args) {
@@ -257,6 +260,7 @@ class KeyguardMessageArea extends TextView {
 
     private CharSequence getChargeInfo(MutableInt icon) {
         CharSequence string = null;
+	if(hasNoBattery) return "";
         if (mShowingBatteryInfo && !mShowingMessage) {
             // Battery status
             if (mCharging) {

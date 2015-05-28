@@ -48,7 +48,7 @@ import java.io.FileDescriptor;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
-
+import com.android.server.power.ShutdownThread;
 
 /**
  * <p>BatteryService monitors the charging status, and charge level of the device
@@ -249,10 +249,13 @@ public final class BatteryService extends Binder {
                 @Override
                 public void run() {
                     if (ActivityManagerNative.isSystemReady()) {
+			ShutdownThread.shutdown(mContext, false);
+			/*
                         Intent intent = new Intent(Intent.ACTION_REQUEST_SHUTDOWN);
                         intent.putExtra(Intent.EXTRA_KEY_CONFIRM, false);
                         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                         mContext.startActivityAsUser(intent, UserHandle.CURRENT);
+			*/
                     }
                 }
             });
@@ -268,10 +271,13 @@ public final class BatteryService extends Binder {
                 @Override
                 public void run() {
                     if (ActivityManagerNative.isSystemReady()) {
+			ShutdownThread.shutdown(mContext, false);
+			/*
                         Intent intent = new Intent(Intent.ACTION_REQUEST_SHUTDOWN);
                         intent.putExtra(Intent.EXTRA_KEY_CONFIRM, false);
                         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                         mContext.startActivityAsUser(intent, UserHandle.CURRENT);
+			*/
                     }
                 }
             });
